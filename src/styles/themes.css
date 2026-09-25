@@ -1,0 +1,159 @@
+/* ───────────── Temas ─────────────
+   Cada tema é só um conjunto de variáveis. Para criar o seu,
+   copie um bloco, mude o nome e use `theme: meu-tema` no .md
+   (e adicione o nome em src/content.config.ts). */
+
+[data-theme] {
+  --font-display: 'Inter Variable', system-ui, sans-serif;
+  --font-body: 'Inter Variable', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+  --title-weight: 700;
+  --title-tracking: -0.035em;
+  --radius: 28px;
+  --grain: 0.07;
+}
+
+[data-theme='aurora'] {
+  --bg: #07081a;
+  --fg: #f4f3ff;
+  --muted: #a5a8cc;
+  --accent: #a78bfa;
+  --accent-2: #22d3ee;
+  --accent-3: #f472b6;
+  --surface: rgb(255 255 255 / 0.06);
+  --border: rgb(255 255 255 / 0.12);
+  --code-bg: rgb(8 9 28 / 0.75);
+  --shiki: dark;
+}
+
+[data-theme='paper'] {
+  --bg: #f3ede2;
+  --fg: #1d1a16;
+  --muted: #6f665b;
+  --accent: #c2410c;
+  --accent-2: #b45309;
+  --accent-3: #9a3412;
+  --surface: rgb(255 255 255 / 0.55);
+  --border: rgb(29 26 22 / 0.14);
+  --code-bg: #fbf8f2;
+  --font-display: 'Fraunces Variable', Georgia, serif;
+  --title-weight: 560;
+  --title-tracking: -0.025em;
+  --grain: 0.12;
+  --shiki: light;
+}
+
+[data-theme='noir'] {
+  --bg: #0a0a0a;
+  --fg: #fafafa;
+  --muted: #8a8a8a;
+  --accent: #d9f99d;
+  --accent-2: #a3e635;
+  --accent-3: #d9f99d;
+  --surface: rgb(255 255 255 / 0.04);
+  --border: rgb(255 255 255 / 0.1);
+  --code-bg: #111;
+  --title-weight: 800;
+  --title-tracking: -0.05em;
+  --radius: 6px;
+  --shiki: dark;
+}
+
+[data-theme='sunset'] {
+  --bg: #2a0b3d;
+  --fg: #fff7f0;
+  --muted: #f3c9d6;
+  --accent: #fde68a;
+  --accent-2: #fb923c;
+  --accent-3: #f472b6;
+  --surface: rgb(255 255 255 / 0.1);
+  --border: rgb(255 255 255 / 0.2);
+  --code-bg: rgb(30 6 44 / 0.6);
+  --font-display: 'Fraunces Variable', Georgia, serif;
+  --title-weight: 600;
+  --shiki: dark;
+}
+
+/* ───────────── Fundos decorativos ───────────── */
+
+.slide .bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--bg);
+}
+.slide .bg::before,
+.slide .bg::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+}
+
+/* aurora: manchas de luz que flutuam devagar */
+.slide[data-theme='aurora'] .bg::before {
+  inset: -30%;
+  background:
+    radial-gradient(40% 35% at 20% 25%, rgb(139 92 246 / 0.55), transparent 70%),
+    radial-gradient(35% 30% at 80% 20%, rgb(34 211 238 / 0.35), transparent 70%),
+    radial-gradient(45% 40% at 70% 85%, rgb(244 114 182 / 0.35), transparent 70%);
+  filter: blur(40px);
+  animation: drift 24s ease-in-out infinite alternate;
+}
+.slide[data-theme='aurora'] .bg::after {
+  inset: 0;
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px);
+  background-size: 96px 96px;
+  mask-image: radial-gradient(ellipse at center, #000 20%, transparent 75%);
+}
+
+/* paper: papel com margem e uma mancha quente */
+.slide[data-theme='paper'] .bg::before {
+  inset: 0;
+  background:
+    radial-gradient(60% 50% at 100% 0%, rgb(251 146 60 / 0.18), transparent 70%),
+    radial-gradient(50% 60% at 0% 100%, rgb(194 65 12 / 0.08), transparent 70%);
+}
+.slide[data-theme='paper'] .bg::after {
+  inset: 56px;
+  border: 1.5px solid rgb(29 26 22 / 0.12);
+  border-radius: 4px;
+}
+
+/* noir: grade técnica + brilho lima */
+.slide[data-theme='noir'] .bg::before {
+  inset: 0;
+  background-image: radial-gradient(rgb(255 255 255 / 0.12) 1.5px, transparent 1.5px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(135deg, #000, transparent 70%);
+}
+.slide[data-theme='noir'] .bg::after {
+  width: 1100px;
+  height: 1100px;
+  right: -400px;
+  bottom: -500px;
+  background: radial-gradient(circle, rgb(217 249 157 / 0.18), transparent 65%);
+}
+
+/* sunset: gradiente em malha */
+.slide[data-theme='sunset'] .bg {
+  background: linear-gradient(160deg, #2a0b3d 0%, #6d1d5a 45%, #c2410c 100%);
+}
+.slide[data-theme='sunset'] .bg::before {
+  inset: -20%;
+  background:
+    radial-gradient(40% 40% at 85% 15%, rgb(253 230 138 / 0.45), transparent 70%),
+    radial-gradient(50% 45% at 10% 90%, rgb(244 114 182 / 0.4), transparent 70%);
+  filter: blur(30px);
+  animation: drift 30s ease-in-out infinite alternate;
+}
+
+@keyframes drift {
+  from { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+  to { transform: translate3d(4%, -3%, 0) rotate(8deg) scale(1.08); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slide .bg::before { animation: none; }
+}

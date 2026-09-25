@@ -1,0 +1,160 @@
+---
+import Base from '../layouts/Base.astro';
+import Slide from '../components/Slide.astro';
+import { getDecks } from '../lib/decks';
+
+const decks = await getDecks();
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+---
+
+<Base title="Apresentações" theme="aurora">
+  <div class="home">
+    <header class="home-head">
+      <p class="eyebrow">slides/ · {decks.length} {decks.length === 1 ? 'apresentação' : 'apresentações'}</p>
+      <h1>Apresentações</h1>
+      <p class="lead">
+        Cada pasta em <code>slides/</code> vira uma apresentação, e cada arquivo <code>.md</code> dentro dela, um slide.
+      </p>
+    </header>
+
+    <ul class="grid">
+      {decks.map((deck) => (
+        <li>
+          <a class="card" href={`${base}${deck.name}/`}>
+            <div class="thumb">
+              <div class="thumb-inner">
+                <Slide
+                  slide={deck.slides[0]}
+                  index={0}
+                  total={deck.slides.length}
+                  deckTitle={deck.title}
+                  deckTheme={deck.theme}
+                />
+              </div>
+            </div>
+            <div class="meta">
+              <span class="name">{deck.title}</span>
+              <span class="info">{deck.slides.length} slides · {deck.theme}</span>
+            </div>
+          </a>
+        </li>
+      ))}
+    </ul>
+
+    {decks.length === 0 && (
+      <p class="lead">Nenhuma apresentação ainda. Rode <code>npm run nova -- minha-palestra</code>.</p>
+    )}
+  </div>
+</Base>
+
+<script>
+  const thumbs = document.querySelectorAll<HTMLElement>('.thumb');
+  const ro = new ResizeObserver((entries) => {
+    for (const e of entries) {
+      (e.target as HTMLElement).style.setProperty('--s', String(e.contentRect.width / 1920));
+    }
+  });
+  thumbs.forEach((t) => ro.observe(t));
+</script>
+
+<style>
+  .home {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 96px 32px 120px;
+  }
+  .home-head { margin-bottom: 64px; }
+  .eyebrow {
+    margin: 0 0 16px;
+    color: var(--accent);
+    font: 500 13px var(--font-mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  h1 {
+    margin: 0;
+    font: 700 clamp(44px, 7vw, 80px) / 1 var(--font-display);
+    letter-spacing: -0.04em;
+    background: linear-gradient(100deg, var(--fg) 40%, var(--accent) 80%, var(--accent-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .lead {
+    max-width: 620px;
+    margin: 20px 0 0;
+    color: var(--muted);
+    font-size: 18px;
+    line-height: 1.6;
+  }
+  code {
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--fg);
+    font: 0.88em var(--font-mono);
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
+    gap: 32px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .card {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+  }
+  .thumb {
+    --s: 0.2;
+    position: relative;
+    aspect-ratio: 16 / 9;
+    border-radius: 14px;
+    overflow: hidden;
+    outline: 1px solid var(--border);
+    box-shadow: 0 30px 60px -30px rgb(0 0 0 / 0.7);
+    transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.35s, outline-color 0.35s;
+  }
+  .thumb-inner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform: scale(var(--s));
+    transform-origin: 0 0;
+    pointer-events: none;
+  }
+  .card:hover .thumb,
+  .card:focus-visible .thumb {
+    transform: translateY(-6px);
+    outline-color: var(--accent);
+    box-shadow: 0 40px 80px -30px rgb(139 92 246 / 0.5);
+  }
+  .card:focus-visible { outline: none; }
+  .meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+    padding: 18px 4px 0;
+  }
+  .name { font-weight: 600; font-size: 17px; }
+  .info {
+    flex-shrink: 0;
+    color: var(--muted);
+    font: 12px var(--font-mono);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  body:has(.home)::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background:
+      radial-gradient(50% 40% at 15% 0%, rgb(139 92 246 / 0.25), transparent 70%),
+      radial-gradient(40% 30% at 90% 10%, rgb(34 211 238 / 0.12), transparent 70%);
+  }
+</style>

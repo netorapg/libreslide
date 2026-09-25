@@ -1,0 +1,53 @@
+import { getCollection, type CollectionEntry } from 'astro:content';
+
+export type SlideEntry = CollectionEntry<'slides'>;
+
+export interface Deck {
+  name: string;
+  title: string;
+  theme: NonNullable<SlideEntry['data']['theme']>;
+  slides: SlideEntry[];
+}
+
+const byPath = (a: SlideEntry, b: SlideEntry) =>
+  (a.filePath ?? a.id).localeCompare(b.filePath ?? b.id, undefined, { numeric: true });
+
+export async function getDecks(): Promise<Deck[]> {
+  const all = (await getCollection('slides')).sort(byPath);
+  const groups = new Map<string, SlideEntry[]>();
+  for (const slide of all) {
+    const name = slide.id.split('/')[0];
+    groups.set(name, [...(groups.get(name) ?? []), slide]);
+  }
+  return [...groups].map(([name, slides]) => {
+    const first = slides[0].data;
+    return {
+      name,
+      title: first.deckTitle ?? stripInline(first.title ?? name),
+      theme: first.theme ?? 'aurora',
+      slides,
+    };
+  });
+}
+
+/** Resolve caminhos "/img/foto.jpg" (da pasta public/) respeitando o `base` do Astro. */
+export function asset(path: string) {
+  if (!path.startsWith('/')) return path;
+  return import.meta.env.BASE_URL.replace(/\/$/, '') + path;
+}
+
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/** Markdown mínimo para textos do frontmatter: **negrito**, *destaque* e quebras de linha. */
+export function inline(s?: string) {
+  if (!s) return '';
+  return escapeHtml(s)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/\n|&lt;br\s*\/?&gt;/g, '<br>');
+}
+
+export function stripInline(s: string) {
+  return s.replace(/\*+/g, '').replace(/\n|<br\s*\/?>/g, ' ');
+}

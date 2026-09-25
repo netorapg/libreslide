@@ -1,0 +1,63 @@
+---
+import { render } from 'astro:content';
+import { asset, inline, type SlideEntry } from '../lib/decks';
+
+interface Props {
+  slide: SlideEntry;
+  index: number;
+  total: number;
+  deckTitle: string;
+  deckTheme: string;
+}
+
+const { slide, index, total, deckTitle, deckTheme } = Astro.props;
+const { Content } = await render(slide);
+const d = slide.data;
+const theme = d.theme ?? deckTheme;
+const big = d.layout === 'cover' || d.layout === 'section';
+const Title = big ? 'h1' : 'h2';
+const hasHead = d.kicker || d.title || d.subtitle;
+const pad = (n: number) => String(n).padStart(2, '0');
+---
+
+<section
+  class:list={['slide', `layout-${d.layout}`, d.image && 'has-image']}
+  data-theme={theme}
+  data-steps={d.steps ? '' : undefined}
+  data-notes={d.notes}
+  style={d.accent ? `--accent: ${d.accent}; --accent-2: ${d.accent}` : undefined}
+  aria-label={`Slide ${index + 1} de ${total}`}
+>
+  <div class="bg" aria-hidden="true">
+    {d.layout === 'image' && d.image && <img class="bg-img" src={asset(d.image)} alt="" />}
+  </div>
+
+  <div class="inner" data-side={d.imagePosition}>
+    <div class="content">
+      {hasHead && (
+        <header class="head">
+          {d.kicker && <p class="kicker">{d.kicker}</p>}
+          {d.title && <Title class="title" set:html={inline(d.title)} />}
+          {d.subtitle && <p class="subtitle" set:html={inline(d.subtitle)} />}
+        </header>
+      )}
+      <div class="body"><Content /></div>
+      {(d.author || d.date) && (
+        <p class="byline">
+          {d.author && <span class="author">{d.author}</span>}
+          {d.date && <span class="date">{d.date}</span>}
+        </p>
+      )}
+    </div>
+    {d.layout === 'split' && d.image && (
+      <figure class="media"><img src={asset(d.image)} alt="" /></figure>
+    )}
+  </div>
+
+  {d.layout !== 'cover' && (
+    <footer class="foot" aria-hidden="true">
+      <span>{deckTitle}</span>
+      <span class="num">{pad(index + 1)}<i>/{pad(total)}</i></span>
+    </footer>
+  )}
+</section>
