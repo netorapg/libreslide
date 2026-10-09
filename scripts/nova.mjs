@@ -1,10 +1,10 @@
-// Cria uma nova apresentação: npm run nova -- nome-da-apresentacao [tema]
-import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
+// Cria uma nova apresentação: npm run nova -- nome-da-apresentacao [tema ou template]
+import { mkdirSync, writeFileSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const [name, theme = 'aurora'] = process.argv.slice(2);
 if (!name) {
-  console.error('Uso: npm run nova -- nome-da-apresentacao [tema]  (aurora, paper, noir, sunset ou um de themes/)');
+  console.error('Uso: npm run nova -- nome-da-apresentacao [tema ou template]  (aurora, paper, noir, sunset, um de themes/ ou de templates/)');
   process.exit(1);
 }
 
@@ -47,6 +47,22 @@ subtitle: Perguntas?
 ---
 `,
 };
+
+// Template (templates/<nome>/): copia os slides iniciais dele, se houver.
+const tplDir = join('templates', theme);
+if (existsSync(join(tplDir, 'template.yaml')) || existsSync(join(tplDir, 'template.yml'))) {
+  const starters = readdirSync(tplDir).filter((f) => f.endsWith('.md') && !f.startsWith('_')).sort();
+  for (const k of Object.keys(files)) delete files[k];
+  if (!starters.length) starters.push(null);
+  starters.forEach((f, i) => {
+    let text = f ? readFileSync(join(tplDir, f), 'utf8') : `---\nlayout: cover\ntitle: x\n---\n`;
+    if (i === 0) {
+      text = text.replace(/^---\r?\n/, `---\ntemplate: ${theme}\n`);
+      text = /^title:.*$/m.test(text) ? text.replace(/^title:.*$/m, `title: ${JSON.stringify(title)}`) : text;
+    }
+    files[f ?? '01-capa.md'] = text;
+  });
+}
 
 for (const [file, content] of Object.entries(files)) writeFileSync(join(dir, file), content);
 console.log(`✓ Criada em ${dir}/ — rode "npm run dev" e abra http://localhost:4321/${slug}/`);

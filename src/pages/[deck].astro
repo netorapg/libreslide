@@ -1,8 +1,6 @@
 ---
-import Base from '../layouts/Base.astro';
-import Slide from '../components/Slide.astro';
+import DeckView from '../components/DeckView.astro';
 import { getDecks, type Deck } from '../lib/decks';
-import '../styles/deck.css';
 
 export async function getStaticPaths() {
   const decks = await getDecks();
@@ -10,56 +8,6 @@ export async function getStaticPaths() {
 }
 
 const { deck } = Astro.props as { deck: Deck };
-const total = deck.slides.length;
 ---
 
-<Base title={deck.title} theme={deck.theme}>
-  <main class="stage" id="stage" data-title={deck.title} data-count={total}>
-    {deck.slides.map((slide, i) => (
-      <div class="slot" data-i={i}>
-        <Slide slide={slide} index={i} total={total} deckTitle={deck.title} deckTheme={deck.theme} />
-      </div>
-    ))}
-  </main>
-
-  <div class="hud">
-    <div class="progress"><i id="progress"></i></div>
-    <nav class="controls" aria-label="Navegação">
-      <a href={import.meta.env.BASE_URL} title="Todas as apresentações">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-      </a>
-      <button data-action="prev" title="Anterior (←)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m15 18-6-6 6-6"/></svg>
-      </button>
-      <span class="count" id="count"></span>
-      <button data-action="next" title="Próximo (→)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg>
-      </button>
-      <button data-action="overview" title="Visão geral (O)">O</button>
-      <button data-action="notes" title="Notas (N)">N</button>
-      <button data-action="fullscreen" title="Tela cheia (F)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-      </button>
-      <button data-action="help" title="Atalhos (?)">?</button>
-    </nav>
-  </div>
-
-  <aside class="panel notes-panel" id="notes" hidden></aside>
-
-  <aside class="panel help-panel" id="help" hidden>
-    <h2>Atalhos</h2>
-    <dl>
-      <dt><kbd>→</kbd> <kbd>Espaço</kbd></dt><dd>Próximo</dd>
-      <dt><kbd>←</kbd></dt><dd>Anterior</dd>
-      <dt><kbd>Home</kbd> <kbd>End</kbd></dt><dd>Primeiro / último</dd>
-      <dt><kbd>O</kbd> <kbd>Esc</kbd></dt><dd>Visão geral</dd>
-      <dt><kbd>F</kbd></dt><dd>Tela cheia</dd>
-      <dt><kbd>N</kbd></dt><dd>Notas do apresentador</dd>
-      <dt><kbd>Ctrl</kbd> <kbd>P</kbd></dt><dd>Exportar PDF</dd>
-    </dl>
-  </aside>
-
-  <script>
-    import '../scripts/deck';
-  </script>
-</Base>
+<DeckView deck={deck} />

@@ -1,6 +1,6 @@
 import { defineCollection } from 'astro:content';
 import { glob } from 'astro/loaders';
-import { slideSchema, themeSchema } from './slide-schema';
+import { slideSchema, templateSchema, themeSchema } from './slide-schema';
 
 export { layouts } from './slide-schema';
 
@@ -18,4 +18,14 @@ const themes = defineCollection({
   schema: themeSchema,
 });
 
-export const collections = { slides, themes };
+// Templates: templates/<nome>/template.yaml → use `template: <nome>` no primeiro slide.
+const templates = defineCollection({
+  loader: glob({
+    pattern: '*/template.{yaml,yml}',
+    base: './templates',
+    generateId: ({ entry }) => entry.split('/')[0],
+  }),
+  schema: templateSchema,
+});
+
+export const collections = { slides, themes, templates };

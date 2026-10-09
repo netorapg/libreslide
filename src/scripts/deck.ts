@@ -41,8 +41,10 @@ for (const slot of slots) {
     body.replaceChildren(cols);
   }
 
-  const frags = [...body.querySelectorAll<HTMLElement>('.step')];
-  if (slide.hasAttribute('data-steps')) {
+  // Template sem animações (data-static): nada de etapas, tudo aparece de uma vez.
+  const animated = !slide.hasAttribute('data-static');
+  const frags = animated ? [...body.querySelectorAll<HTMLElement>('.step')] : [];
+  if (animated && slide.hasAttribute('data-steps')) {
     frags.push(...body.querySelectorAll<HTMLElement>('li:not(li li), .cards > *, .col'));
   }
   slot.frags = [...new Set(frags)].sort((a, b) =>

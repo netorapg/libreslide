@@ -1,0 +1,18 @@
+# Template de apresentação. Use com `template: <nome desta pasta>` no primeiro slide.
+# Os .md desta pasta são os slides iniciais de cada apresentação nova criada com ele.
+
+name: "Instituto Exemplo"        # nome exibido
+theme: paper          # tema: aurora | paper | noir | sunset | um de themes/
+lockTheme: true      # true: os slides não podem trocar o tema
+
+logo: "logo.svg"           # arquivo nesta pasta (ou /img/...)
+logoPosition: top-right  # top-left | top-right | bottom-left | bottom-right
+logoSize: 72           # altura em px, num slide de 1920×1080
+logoOnCover: true      # mostrar a logo também na capa
+
+footer: "{title} · Instituto Exemplo"   # texto do rodapé; {title} = nome da apresentação; "" = sem texto
+slideNumbers: true     # numeração no rodapé
+
+textSize: 1           # tamanho do texto (1 = normal; 0.6 a 1.6)
+titleSize: 0.85          # tamanho dos títulos (1 = normal; 0.6 a 1.6)
+animations: false       # false: sem transições, sem revelar itens aos poucos

@@ -1,24 +1,37 @@
 ---
 import { render } from 'astro:content';
-import { asset, getThemes, inline, resolveTheme, type SlideEntry } from '../lib/decks';
+import { asset, getThemes, inline, resolveTheme, type Deck, type SlideEntry } from '../lib/decks';
 
 interface Props {
   slide: SlideEntry;
   index: number;
   total: number;
-  deckTitle: string;
-  deckTheme: string;
+  deck: Deck;
 }
 
-const { slide, index, total, deckTitle, deckTheme } = Astro.props;
+const { slide, index, total, deck } = Astro.props;
 const { Content } = await render(slide);
 const d = slide.data;
+const tpl = deck.template;
 const { info } = await getThemes();
-const theme = resolveTheme(info, d.theme, deckTheme);
+// Template com tema travado: o `theme` dos slides é ignorado.
+const theme = resolveTheme(info, tpl?.lockTheme ? undefined : d.theme, deck.theme);
 const big = d.layout === 'cover' || d.layout === 'section';
 const Title = big ? 'h1' : 'h2';
 const hasHead = d.kicker || d.title || d.subtitle;
 const pad = (n: number) => String(n).padStart(2, '0');
+
+const cover = d.layout === 'cover';
+const logo = tpl?.logoUrl && (!cover || tpl.logoOnCover) ? tpl.logoUrl : undefined;
+const logoAt = logo ? tpl!.logoPosition : undefined;
+const footText = (tpl?.footer ?? '{title}').replaceAll('{title}', deck.title);
+const showNum = tpl?.slideNumbers ?? true;
+const vars = [
+  d.accent && `--accent: ${d.accent}; --accent-2: ${d.accent}`,
+  tpl && tpl.textSize !== 1 && `--text-scale: ${tpl.textSize}`,
+  tpl && tpl.titleSize !== 1 && `--title-scale: ${tpl.titleSize}`,
+  logo && `--logo-h: ${tpl!.logoSize}px`,
+].filter(Boolean).join('; ');
 ---
 
 <section
@@ -27,13 +40,17 @@ const pad = (n: number) => String(n).padStart(2, '0');
   data-bg={theme.background}
   data-mode={theme.mode}
   data-steps={d.steps ? '' : undefined}
+  data-static={tpl && !tpl.animations ? '' : undefined}
+  data-logo={logoAt}
   data-notes={d.notes}
-  style={d.accent ? `--accent: ${d.accent}; --accent-2: ${d.accent}` : undefined}
+  style={vars || undefined}
   aria-label={`Slide ${index + 1} de ${total}`}
 >
   <div class="bg" aria-hidden="true">
     {d.layout === 'image' && d.image && <img class="bg-img" src={asset(d.image)} alt="" />}
   </div>
+
+  {logoAt?.startsWith('top') && <img class="logo" src={logo} alt="" />}
 
   <div class="inner" data-side={d.imagePosition}>
     <div class="content">
@@ -57,10 +74,13 @@ const pad = (n: number) => String(n).padStart(2, '0');
     )}
   </div>
 
-  {d.layout !== 'cover' && (
+  {(!cover || logoAt?.startsWith('bottom')) && (
     <footer class="foot" aria-hidden="true">
-      <span>{deckTitle}</span>
-      <span class="num">{pad(index + 1)}<i>/{pad(total)}</i></span>
+      {logoAt === 'bottom-left' && <img class="logo" src={logo} alt="" />}
+      {!cover && footText && <span class="foot-text">{footText}</span>}
+      <i class="grow"></i>
+      {!cover && showNum && <span class="num">{pad(index + 1)}<i>/{pad(total)}</i></span>}
+      {logoAt === 'bottom-right' && <img class="logo" src={logo} alt="" />}
     </footer>
   )}
 </section>

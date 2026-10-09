@@ -6,6 +6,8 @@ export const layouts = [
   'quote', 'split', 'image', 'columns',
 ] as const;
 
+const slug = z.string().regex(/^[a-z0-9-]+$/, 'use só letras minúsculas, números e hífen');
+
 // Frontmatter de cada slide. Usado pela coleção (content.config.ts)
 // e pelo editor (editor/plugin.mjs), que valida enquanto você digita.
 export const slideSchema = z.object({
@@ -15,7 +17,9 @@ export const slideSchema = z.object({
   kicker: z.string().optional(),
   // Tema: no primeiro slide define o tema da apresentação; nos demais, sobrescreve só aquele slide.
   // Um dos prontos (aurora, paper, noir, sunset) ou o nome de um arquivo em themes/.
-  theme: z.string().regex(/^[a-z0-9-]+$/, 'use só letras minúsculas, números e hífen').optional(),
+  theme: slug.optional(),
+  // Só lido no primeiro slide: nome de uma pasta em templates/ (logo, rodapé, fontes, animações…).
+  template: slug.optional(),
   // Só lido no primeiro slide: nome exibido no rodapé e na página inicial.
   deckTitle: z.string().optional(),
   author: z.string().optional(),
@@ -49,4 +53,23 @@ export const themeSchema = z.object({
   }),
   corners: z.number().min(0).max(60).default(28),
   grain: z.number().min(0).max(0.3).default(0.07),
+});
+
+export const logoPositions = ['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const;
+
+// Template em templates/<nome>/template.yaml: o padrão visual de uma instituição
+// (ver templates/instituicao-exemplo/). Vale para a apresentação inteira.
+export const templateSchema = z.object({
+  name: z.string().optional(), // nome exibido
+  theme: slug.optional(),
+  lockTheme: z.boolean().default(false), // slides não podem trocar o tema
+  logo: z.string().optional(), // arquivo na pasta do template ou /img/...
+  logoPosition: z.enum(logoPositions).default('top-right'),
+  logoSize: z.number().min(24).max(300).default(72), // altura em px (slide de 1920×1080)
+  logoOnCover: z.boolean().default(true),
+  footer: z.string().default('{title}'), // {title} = nome da apresentação
+  slideNumbers: z.boolean().default(true),
+  textSize: z.number().min(0.6).max(1.6).default(1),
+  titleSize: z.number().min(0.6).max(1.6).default(1),
+  animations: z.boolean().default(true),
 });

@@ -69,14 +69,23 @@
           </button>
         </div>
         <nav class="theme-list" id="theme-list"></nav>
+        <div class="side-head themes-head">
+          <span>Templates</span>
+          <button class="icon" id="new-template" title="Novo template (padrão de uma instituição: logo, rodapé, fontes…)">
+            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
+          </button>
+        </div>
+        <nav class="theme-list" id="template-list"></nav>
         <p class="side-tip">Arquivos com <code>_</code> no início são rascunhos e não aparecem na apresentação.</p>
       </aside>
 
       <section class="pane editor-pane">
         <div id="editor"></div>
         <form class="theme-panel" id="theme-panel" hidden autocomplete="off"></form>
+        <form class="theme-panel" id="template-panel" hidden autocomplete="off"></form>
+        <input type="file" id="logo-input" accept="image/*" hidden />
         <div class="empty" id="empty">
-          <p>Escolha um slide à esquerda<br />ou crie uma apresentação ou um tema novo.</p>
+          <p>Escolha um slide à esquerda<br />ou crie uma apresentação, um tema ou um template.</p>
         </div>
       </section>
 

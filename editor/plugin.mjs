@@ -1,6 +1,6 @@
 // Editor estilo Overleaf para os slides — só existe no `npm run dev`.
 // Abre em http://localhost:4321/__editor/
-import { readFile, writeFile, readdir, mkdir, rm, rename, stat } from 'node:fs/promises';
+import { readFile, writeFile, readdir, mkdir, rm, rename, stat, cp, copyFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, resolve, relative, sep, extname, basename } from 'node:path';
 import yaml from 'js-yaml';
@@ -10,6 +10,7 @@ const ROOT = process.cwd();
 const SLIDES = resolve(ROOT, 'slides');
 const IMG = resolve(ROOT, 'public/img');
 const THEMES = resolve(ROOT, 'themes');
+const TEMPLATES = resolve(ROOT, 'templates');
 const HTML = resolve(ROOT, 'editor/index.html');
 const API = '/__editor/api/';
 
@@ -59,9 +60,9 @@ async function body(req) {
   return Buffer.concat(chunks);
 }
 
-const cover = (title, theme) => `---
+const cover = (title, line) => `---
 layout: cover
-theme: ${theme}
+${line}
 kicker: Apresentação
 title: ${title}
 subtitle: Um subtítulo que explica a ideia em uma frase.
@@ -91,8 +92,20 @@ const YAML_ERRORS = {
 };
 const TYPES = { string: 'texto', number: 'número', boolean: 'true/false', object: 'objeto', array: 'lista', date: 'data', null: 'vazio', undefined: 'nada' };
 
-/** Valida o frontmatter com o mesmo schema da coleção. Linhas são 1-based no arquivo. */
-async function validate(server, text) {
+/** Lê `chave: valor` simples do frontmatter de um arquivo (sem validar). */
+async function frontmatterOf(file) {
+  try {
+    const m = FRONTMATTER.exec(await readFile(file, 'utf8'));
+    const data = m ? yaml.load(m[1]) : null;
+    return data && typeof data === 'object' ? data : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Valida o frontmatter com o mesmo schema da coleção. Linhas são 1-based no arquivo.
+ *  `path` ("deck/arquivo.md") permite checar regras do template da apresentação. */
+async function validate(server, text, path) {
   const m = FRONTMATTER.exec(text);
   if (!m) return [];
   const raw = m[1];
@@ -127,6 +140,32 @@ async function validate(server, text) {
     const all = await themeNames(server);
     if (!all.includes(data.theme)) {
       out.push({ line: lineOf('theme'), severity: 'error', message: `theme: "${data.theme}" não existe. Temas: ${all.join(', ')}.` });
+    }
+  }
+  if (typeof data.template === 'string' && /^[a-z0-9-]+$/.test(data.template)) {
+    const all = await templateNames();
+    if (!all.includes(data.template)) {
+      out.push({ line: lineOf('template'), severity: 'error', message: `template: "${data.template}" não existe. Templates: ${all.join(', ') || 'nenhum (crie um em templates/)'}.` });
+    }
+  }
+  // Regras que dependem da posição do slide na apresentação.
+  if (path && (data.template !== undefined || data.theme !== undefined)) {
+    let first;
+    let isFirst = true;
+    try {
+      const file = slidePath(path);
+      const files = (await readdir(join(file, '..'))).filter((f) => f.endsWith('.md') && !f.startsWith('_')).sort(byName);
+      isFirst = !files.length || files[0] === basename(file);
+      first = isFirst ? data : await frontmatterOf(join(file, '..', files[0]));
+    } catch {}
+    if (!isFirst && data.template !== undefined) {
+      out.push({ line: lineOf('template'), severity: 'warning', message: 'template só vale no primeiro slide; aqui é ignorado.' });
+    }
+    if (data.theme !== undefined && typeof first?.template === 'string') {
+      const tpl = await readTemplate(server, first.template).catch(() => null);
+      if (tpl?.lockTheme) {
+        out.push({ line: lineOf('theme'), severity: 'warning', message: `O template "${first.template}" trava o tema em "${tpl.theme ?? 'aurora'}"; theme é ignorado.` });
+      }
     }
   }
   const res = slideSchema.safeParse(data);
@@ -201,7 +240,166 @@ async function parseTheme(server, text) {
   return res.data;
 }
 
+// ───────── Templates (templates/<nome>/template.yaml) ─────────
+
+function templateDir(name) {
+  const n = String(name ?? '');
+  if (!/^[a-z0-9-]+$/.test(n)) throw new HttpError(400, `Nome de template inválido: ${name}`);
+  return join(TEMPLATES, n);
+}
+
+const templateFile = (name) => {
+  const dir = templateDir(name);
+  const yml = join(dir, 'template.yml');
+  return existsSync(yml) ? yml : join(dir, 'template.yaml');
+};
+
+async function templateNames() {
+  if (!existsSync(TEMPLATES)) return [];
+  const dirs = (await readdir(TEMPLATES, { withFileTypes: true })).filter((d) => d.isDirectory());
+  return dirs.map((d) => d.name).filter((n) => /^[a-z0-9-]+$/.test(n) && existsSync(templateFile(n))).sort(byName);
+}
+
+async function parseTemplate(server, data) {
+  const { templateSchema } = await server.ssrLoadModule('/src/slide-schema.ts');
+  const res = templateSchema.safeParse(data ?? {});
+  if (!res.success) {
+    const i = res.error.issues[0];
+    throw new HttpError(422, `${i.path.join('.')}: ${i.message}`);
+  }
+  if (res.data.theme && !(await themeNames(server)).includes(res.data.theme)) {
+    throw new HttpError(422, `theme: "${res.data.theme}" não existe.`);
+  }
+  return res.data;
+}
+
+async function readTemplate(server, name) {
+  let data;
+  try { data = yaml.load(await readFile(templateFile(name), 'utf8')); } catch (err) {
+    if (err.code === 'ENOENT') throw new HttpError(404, `O template ${name} não existe.`);
+    throw new HttpError(422, `YAML inválido: ${err.reason ?? err.message}`);
+  }
+  return parseTemplate(server, data);
+}
+
+const templateSlides = async (name) =>
+  (await readdir(templateDir(name))).filter((f) => f.endsWith('.md') && !f.startsWith('_')).sort(byName);
+
+const opt = (key, value, comment) =>
+  value === undefined || value === '' ? `# ${key}:${comment}` : `${key}: ${value}${comment}`;
+const templateYaml = (t) => `# Template de apresentação. Use com \`template: <nome desta pasta>\` no primeiro slide.
+# Os .md desta pasta são os slides iniciais de cada apresentação nova criada com ele.
+
+${opt('name', t.name && q(t.name), '        # nome exibido')}
+${opt('theme', t.theme, '          # tema: aurora | paper | noir | sunset | um de themes/')}
+lockTheme: ${t.lockTheme}      # true: os slides não podem trocar o tema
+
+${opt('logo', t.logo && q(t.logo), '           # arquivo nesta pasta (ou /img/...)')}
+logoPosition: ${t.logoPosition}  # top-left | top-right | bottom-left | bottom-right
+logoSize: ${t.logoSize}           # altura em px, num slide de 1920×1080
+logoOnCover: ${t.logoOnCover}      # mostrar a logo também na capa
+
+footer: ${q(t.footer)}   # texto do rodapé; {title} = nome da apresentação; "" = sem texto
+slideNumbers: ${t.slideNumbers}     # numeração no rodapé
+
+textSize: ${t.textSize}           # tamanho do texto (1 = normal; 0.6 a 1.6)
+titleSize: ${t.titleSize}          # tamanho dos títulos (1 = normal; 0.6 a 1.6)
+animations: ${t.animations}       # false: sem transições, sem revelar itens aos poucos
+`;
+
+/** Põe (ou troca) `key: value` no frontmatter de um texto de slide. */
+function setKey(text, key, value) {
+  const line = `${key}: ${value}`;
+  if (!/^---\r?\n/.test(text)) return `---\n${line}\n---\n\n${text}`;
+  const end = text.indexOf('\n---', 3);
+  const head = text.slice(0, end);
+  const re = new RegExp(`^${key}:.*$`, 'm');
+  return re.test(head) ? head.replace(re, line) + text.slice(end) : text.replace(/^---\r?\n/, `---\n${line}\n`);
+}
+
 const routes = {
+  'GET templates': async ({ server }) =>
+    Promise.all((await templateNames()).map(async (name) => {
+      try {
+        return { name, title: (await readTemplate(server, name)).name };
+      } catch (err) {
+        return { name, error: err.message };
+      }
+    })),
+
+  'GET template': async ({ query, server }) => {
+    const name = query.get('name');
+    const template = await readTemplate(server, name);
+    const logoUrl = template.logo
+      ? template.logo.startsWith('/') ? template.logo : `/templates/${name}/${template.logo}`
+      : null;
+    return { template, slides: await templateSlides(name), logoUrl };
+  },
+
+  'PUT template': async ({ query, json, server }) => {
+    const file = templateFile(query.get('name'));
+    if (!existsSync(file)) throw new HttpError(404, 'Template não existe mais.');
+    const t = await parseTemplate(server, json);
+    await writeFile(file, templateYaml(t));
+    return { ok: true };
+  },
+
+  // Cria templates/<nome>/: { name, base? } — `base` é outro template para copiar.
+  'POST template': async ({ json, server }) => {
+    const name = slugify(String(json.name ?? '')).replace(/[._]/g, '-');
+    if (!name) throw new HttpError(400, 'Dê um nome ao template.');
+    const dir = templateDir(name);
+    if (existsSync(dir)) throw new HttpError(409, `O template ${name} já existe.`);
+    if (json.base) {
+      await cp(templateDir(json.base), dir, { recursive: true });
+    } else {
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(dir, 'template.yaml'), templateYaml(await parseTemplate(server, { theme: 'aurora' })));
+    }
+    return { name };
+  },
+
+  'DELETE template': async ({ query }) => {
+    await rm(templateDir(query.get('name')), { recursive: true });
+    return { ok: true };
+  },
+
+  // Troca a logo: grava logo.<ext> na pasta do template e atualiza o template.yaml.
+  'POST template-logo': async ({ query, req, server }) => {
+    const name = query.get('name');
+    const dir = templateDir(name);
+    const t = await readTemplate(server, name);
+    const ext = extname(basename(String(query.get('file') ?? ''))).toLowerCase();
+    if (!/^\.(png|jpe?g|gif|webp|svg|avif)$/.test(ext)) throw new HttpError(400, 'Formato de imagem não suportado.');
+    for (const f of await readdir(dir)) if (/^logo\.\w+$/.test(f)) await rm(join(dir, f));
+    await writeFile(join(dir, `logo${ext}`), await body(req));
+    t.logo = `logo${ext}`;
+    await writeFile(templateFile(name), templateYaml(t));
+    return { logo: t.logo };
+  },
+
+  // Os slides de uma apresentação viram os slides iniciais do template: { name, deck }
+  'POST template-slides': async ({ json }) => {
+    const dir = templateDir(json.name);
+    const from = deckPath(json.deck);
+    const files = (await readdir(from)).filter((f) => f.endsWith('.md') && !f.startsWith('_'));
+    if (!files.length) throw new HttpError(400, 'A apresentação não tem slides.');
+    for (const f of await templateSlides(json.name)) await rm(join(dir, f));
+    for (const f of files) await copyFile(join(from, f), join(dir, f));
+    return { slides: files.length };
+  },
+
+  // Aplica um template a uma apresentação: { name, deck } → template: <nome> no 1º slide.
+  'POST use-template': async ({ json }) => {
+    templateDir(json.name);
+    const dir = deckPath(json.deck);
+    const first = (await readdir(dir)).filter((f) => f.endsWith('.md') && !f.startsWith('_')).sort(byName)[0];
+    if (!first) throw new HttpError(400, 'A apresentação não tem slides.');
+    const file = join(dir, first);
+    await writeFile(file, setKey(await readFile(file, 'utf8'), 'template', json.name));
+    return { path: `${json.deck}/${first}` };
+  },
+
   'GET themes': async ({ server }) => {
     const { builtinThemes } = await themesLib(server);
     const custom = (await customThemes()).filter((t) => !builtinThemes.includes(t));
@@ -245,7 +443,9 @@ const routes = {
 
   'GET tree': async () => tree(),
 
-  'POST validate': async ({ req, server }) => ({ diagnostics: await validate(server, (await body(req)).toString()) }),
+  'POST validate': async ({ req, query, server }) => ({
+    diagnostics: await validate(server, (await body(req)).toString(), query.get('path')),
+  }),
 
   'GET file': async ({ query }) => ({ text: await readFile(slidePath(query.get('path')), 'utf8') }),
 
@@ -268,15 +468,27 @@ const routes = {
     return { path: `${json.deck}/${file}` };
   },
 
+  // Nova apresentação: { name, theme } ou { name, template } — com template, copia os slides iniciais dele.
   'POST deck': async ({ json }) => {
     const name = slugify(String(json.name ?? ''));
     if (!name) throw new HttpError(400, 'Dê um nome à apresentação.');
     const dir = deckPath(name);
     if (existsSync(dir)) throw new HttpError(409, `A pasta slides/${name} já existe.`);
-    await mkdir(dir);
     const title = String(json.name).trim().replace(/^\w/, (c) => c.toUpperCase());
-    await writeFile(join(dir, '01-capa.md'), cover(title, json.theme || 'aurora'));
-    return { path: `${name}/01-capa.md` };
+    const template = json.template ? String(json.template) : null;
+    const starters = template ? await templateSlides(template) : [];
+    await mkdir(dir);
+    if (!starters.length) {
+      const line = template ? `template: ${template}` : `theme: ${json.theme || 'aurora'}`;
+      await writeFile(join(dir, '01-capa.md'), cover(title, line));
+      return { path: `${name}/01-capa.md` };
+    }
+    for (const [i, f] of starters.entries()) {
+      let text = await readFile(join(templateDir(template), f), 'utf8');
+      if (i === 0) text = setKey(setKey(text, 'template', template), 'title', q(title));
+      await writeFile(join(dir, f), text);
+    }
+    return { path: `${name}/${starters[0]}` };
   },
 
   'POST rename': async ({ json }) => {
@@ -361,6 +573,11 @@ export default function slideEditor() {
       // recarregar arquivos alterados por fora (outro editor, git, etc.).
       const clients = new Set();
       const notify = (kind) => async (file) => {
+        if (file.startsWith(TEMPLATES + sep)) {
+          const msg = `data: ${JSON.stringify({ kind: 'templates', path: relative(TEMPLATES, file).split(sep)[0] })}\n\n`;
+          for (const res of clients) res.write(msg);
+          return;
+        }
         if (file.startsWith(THEMES + sep)) {
           const msg = `data: ${JSON.stringify({ kind: 'themes', path: relative(THEMES, file).replace(/\.ya?ml$/, '') })}\n\n`;
           for (const res of clients) res.write(msg);
@@ -373,7 +590,7 @@ export default function slideEditor() {
         const msg = `data: ${JSON.stringify({ kind, path, mtime })}\n\n`;
         for (const res of clients) res.write(msg);
       };
-      server.watcher.add([SLIDES, THEMES]);
+      server.watcher.add([SLIDES, THEMES, TEMPLATES]);
       server.watcher.on('change', notify('change'));
       server.watcher.on('add', notify('add'));
       server.watcher.on('unlink', notify('unlink'));

@@ -23,6 +23,8 @@
     filter 0.8s ease;
 }
 .slot:not(.is-active) > .slide { opacity: 0; filter: blur(10px); pointer-events: none; }
+.slot > .slide[data-static] { transition: none; }
+.slot:not(.is-active) > .slide[data-static] { transform: none; filter: none; }
 .slot.is-past > .slide { transform: translateX(-120px) scale(0.97); }
 .slot.is-future > .slide { transform: translateX(120px) scale(0.97); }
 

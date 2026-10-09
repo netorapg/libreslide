@@ -6,7 +6,7 @@ Slides bonitos escritos em `.md`: **cada pasta em `slides/` é uma apresentaçã
 npm install
 npm run dev            # abre http://localhost:4321
 npm run editor         # editor no navegador: http://localhost:4321/__editor/
-npm run nova -- minha-palestra [tema]   # aurora, paper, noir, sunset ou um seu
+npm run nova -- minha-palestra [tema ou template]   # aurora, paper, noir, sunset, um tema seu ou um template
 npm run build          # gera um site estático em dist/
 ```
 
@@ -36,11 +36,13 @@ slides/
     02-agenda.md
     _rascunho.md      ← arquivos começando com "_" são ignorados
 public/img/           ← imagens (use image: /img/foto.jpg)
+themes/               ← temas seus (meu-tema.yaml)
+templates/            ← templates de instituição (uma pasta cada)
 ```
 
 ### Suas apresentações ficam fora do git
 
-Só `slides/exemplo/` (e a imagem dela) e o tema `themes/oceano.yaml` são versionados. Qualquer outra pasta em `slides/`, imagem em `public/img/` ou tema em `themes/` são ignorados pelo `.gitignore`, então você pode clonar o projeto, fazer as suas palestras e atualizar o código com `git pull` sem misturar conteúdo pessoal.
+Só `slides/exemplo/` (e a imagem dela), o tema `themes/oceano.yaml` e o template `templates/instituicao-exemplo/` são versionados. Qualquer outra pasta em `slides/`, imagem em `public/img/`, tema em `themes/` ou template em `templates/` é ignorado pelo `.gitignore`, então você pode clonar o projeto, fazer as suas palestras e atualizar o código com `git pull` sem misturar conteúdo pessoal.
 
 Quer versionar uma apresentação no seu fork? Adicione ao `.gitignore`:
 
@@ -48,6 +50,7 @@ Quer versionar uma apresentação no seu fork? Adicione ao `.gitignore`:
 !slides/minha-palestra/
 !public/img/minha-foto.jpg
 !themes/meu-tema.yaml
+!templates/minha-instituicao/
 ```
 
 ## Um slide
@@ -56,6 +59,7 @@ Quer versionar uma apresentação no seu fork? Adicione ao `.gitignore`:
 ---
 layout: split             # cover | default | section | center | statement | quote | split | image | columns
 theme: aurora             # aurora | paper | noir | sunset | um seu (no 1º slide vale para a apresentação toda)
+template: minha-instituicao  # só no 1º slide: aplica um template de templates/
 kicker: Introdução        # rótulo pequeno acima do título
 title: Olá, *mundo*       # *texto* ganha destaque em gradiente; <br> quebra linha
 subtitle: Uma frase curta
@@ -105,6 +109,37 @@ grain: 0.06         # 0 a 0.3
 
 e se usa com `theme: <nome>` no slide. O jeito mais fácil é pelo editor: na seção **Temas** da barra lateral, clique em **+** (ou no **+** de um tema pronto para partir dele), ajuste cores, fonte e fundo vendo o resultado ao vivo e clique em **Usar em …** para aplicar à apresentação. `themes/oceano.yaml` é um exemplo; os seus temas ficam fora do git, como as apresentações.
 
+## Templates (padrão de uma instituição)
+
+Algumas instituições exigem que toda apresentação siga um padrão: logo, rodapé, tamanho de letra, sem animações. Um **template** guarda essas regras numa pasta, e a apresentação só precisa de `template: <nome>` no primeiro slide:
+
+```
+templates/minha-instituicao/
+  template.yaml     ← as regras
+  logo.svg          ← a logo (png, jpg, svg, webp…)
+  01-capa.md        ← slides iniciais (opcionais): copiados para cada apresentação nova
+  02-conteudo.md
+```
+
+```yaml
+name: "Universidade Exemplo"   # nome exibido
+theme: paper                   # tema (pronto ou de themes/)
+lockTheme: true                # os slides não podem trocar o tema
+logo: "logo.svg"               # arquivo da pasta (ou /img/...)
+logoPosition: top-right        # top-left | top-right | bottom-left | bottom-right
+logoSize: 72                   # altura em px (slide de 1920×1080)
+logoOnCover: true              # logo também na capa
+footer: "{title} · Universidade Exemplo"   # {title} = nome da apresentação; "" = sem texto
+slideNumbers: true             # numeração no rodapé
+textSize: 1                    # tamanho do texto (0.6 a 1.6)
+titleSize: 1                   # tamanho dos títulos (0.6 a 1.6)
+animations: false              # sem transições e sem itens revelados aos poucos
+```
+
+Pelo editor é mais fácil: na seção **Templates** da barra lateral, clique em **+**, envie a logo e ajuste o resto vendo a prévia. **Usar em …** aplica o template à apresentação, e **Usar os slides de …** transforma uma apresentação pronta nos slides iniciais do template. Ao criar uma apresentação (no editor ou com `npm run nova -- nome minha-instituicao`), escolha o template e ela já começa com esses slides.
+
+Para compartilhar com colegas, basta copiar a pasta do template. `templates/instituicao-exemplo/` é um exemplo.
+
 ### Extras no Markdown
 
 - `<div class="cards">…</div>` — cartões de vidro lado a lado (cada filho é um cartão; deixe linhas em branco em volta do Markdown dentro do HTML).
@@ -126,7 +161,8 @@ e se usa com `theme: <nome>` no slide. O jeito mais fácil é pelo editor: na se
 
 O endereço guarda o slide atual (`/minha-palestra/#5`). No celular, deslize para os lados.
 
-## Criando um tema
+## Criando um tema pronto (no código)
 
-Os temas são só variáveis CSS em `src/styles/themes.css`. Copie um bloco, renomeie
-e adicione o nome em `themes` dentro de `src/content.config.ts`.
+Para a maioria dos casos, um tema em `themes/` basta (veja **Temas**). Os quatro temas prontos
+são variáveis CSS em `src/styles/themes.css`; para criar outro do mesmo jeito, copie um bloco,
+renomeie e adicione o nome em `builtinThemes`, `builtinInfo` e `builtinPresets` (`src/lib/themes.ts`).

@@ -31,18 +31,12 @@ const dev = import.meta.env.DEV;
           <a class="card" href={`${base}${deck.name}/`}>
             <div class="thumb">
               <div class="thumb-inner">
-                <Slide
-                  slide={deck.slides[0]}
-                  index={0}
-                  total={deck.slides.length}
-                  deckTitle={deck.title}
-                  deckTheme={deck.theme}
-                />
+                <Slide slide={deck.slides[0]} index={0} total={deck.slides.length} deck={deck} />
               </div>
             </div>
             <div class="meta">
               <span class="name">{deck.title}</span>
-              <span class="info">{deck.slides.length} slides · {deck.theme}</span>
+              <span class="info">{deck.slides.length} slides · {deck.template?.name ?? deck.template?.id ?? deck.theme}</span>
             </div>
           </a>
         </li>

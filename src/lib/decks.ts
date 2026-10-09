@@ -3,11 +3,56 @@ import { builtinInfo, themeCss, type ThemeInfo } from './themes';
 
 export type SlideEntry = CollectionEntry<'slides'>;
 
+export type TemplateData = CollectionEntry<'templates'>['data'];
+export interface Template extends TemplateData {
+  id: string;
+  /** URL da logo, pronta para o <img>. */
+  logoUrl?: string;
+}
+
 export interface Deck {
   name: string;
   title: string;
   theme: string;
+  template?: Template;
   slides: SlideEntry[];
+}
+
+// Logos e outras imagens dentro de templates/<nome>/ (o Vite copia para o build).
+const templateFiles = import.meta.glob<string>('/templates/*/*.{svg,png,jpg,jpeg,webp,gif,avif}', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+});
+
+/** Todos os templates de templates/<nome>/template.yaml. */
+export async function getTemplates(): Promise<Record<string, Template>> {
+  const out: Record<string, Template> = {};
+  for (const t of await getCollection('templates')) {
+    const { logo } = t.data;
+    let logoUrl: string | undefined;
+    if (logo?.startsWith('/')) logoUrl = asset(logo);
+    else if (logo) {
+      logoUrl = templateFiles[`/templates/${t.id}/${logo}`];
+      if (!logoUrl) console.warn(`[templates] templates/${t.id}/${logo} não existe.`);
+    }
+    out[t.id] = { ...t.data, id: t.id, logoUrl };
+  }
+  return out;
+}
+
+/** Junta a apresentação a um template (ou a nenhum). Também usado pela prévia de templates do editor. */
+export function applyTemplate(deck: Deck, templates: Record<string, Template>, name: string | undefined) {
+  const template = name ? templates[name] : undefined;
+  if (name && !template) {
+    console.warn(`[templates] Template "${name}" não existe (templates/${name}/template.yaml).`);
+  }
+  const own = deck.slides[0].data.theme;
+  return {
+    ...deck,
+    template,
+    theme: (template?.lockTheme ? template.theme : own ?? template?.theme) ?? 'aurora',
+  };
 }
 
 const byPath = (a: SlideEntry, b: SlideEntry) =>
@@ -15,6 +60,7 @@ const byPath = (a: SlideEntry, b: SlideEntry) =>
 
 export async function getDecks(): Promise<Deck[]> {
   const all = (await getCollection('slides')).sort(byPath);
+  const templates = await getTemplates();
   const groups = new Map<string, SlideEntry[]>();
   for (const slide of all) {
     const name = slide.id.split('/')[0];
@@ -22,12 +68,8 @@ export async function getDecks(): Promise<Deck[]> {
   }
   return [...groups].map(([name, slides]) => {
     const first = slides[0].data;
-    return {
-      name,
-      title: first.deckTitle ?? stripInline(first.title ?? name),
-      theme: first.theme ?? 'aurora',
-      slides,
-    };
+    const deck = { name, title: first.deckTitle ?? stripInline(first.title ?? name), theme: 'aurora', slides };
+    return applyTemplate(deck, templates, first.template);
   });
 }
 

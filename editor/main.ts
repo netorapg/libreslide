@@ -14,12 +14,15 @@ import { linter, type Diagnostic } from '@codemirror/lint';
 const LAYOUTS = ['default', 'cover', 'section', 'center', 'statement', 'quote', 'split', 'image', 'columns'];
 // Lista de temas (prontos + themes/*.yaml), atualizada pelo servidor.
 let THEMES = ['aurora', 'paper', 'noir', 'sunset'];
+// Templates (templates/<nome>/), também atualizados pelo servidor.
+let TEMPLATE_NAMES: string[] = [];
 const KEYS: Record<string, string> = {
   layout: 'Tipo de slide',
   title: 'Título (*texto* = destaque)',
   subtitle: 'Subtítulo',
   kicker: 'Rótulo acima do título',
   theme: 'Tema (no 1º slide vale para tudo)',
+  template: 'Template de instituição (1º slide)',
   deckTitle: 'Nome da apresentação (1º slide)',
   author: 'Autor',
   date: 'Data',
@@ -95,8 +98,11 @@ function setStatus(state: 'idle' | 'dirty' | 'saving' | 'saved' | 'error', text 
   s.textContent = text || { idle: '', dirty: 'Editando…', saving: 'Salvando…', saved: 'Salvo', error: 'Erro ao salvar' }[state];
 }
 
+type Choice = string | { group: string; options: { value: string; label: string }[] };
+const option = (value: string, label = value) => `<option value="${esc(value)}">${esc(label)}</option>`;
+
 /** Diálogo simples: texto (input) ou escolha (select). Resolve null se cancelar. */
-function ask(title: string, opts: { text?: string; value?: string; choices?: string[]; ok?: string; danger?: boolean } = {}) {
+function ask(title: string, opts: { text?: string; value?: string; choices?: Choice[]; ok?: string; danger?: boolean } = {}) {
   const dialog = $<HTMLDialogElement>('dialog');
   const input = $<HTMLInputElement>('dialog-input');
   const select = $<HTMLSelectElement>('dialog-select');
@@ -108,7 +114,11 @@ function ask(title: string, opts: { text?: string; value?: string; choices?: str
   input.hidden = opts.value === undefined;
   input.value = opts.value ?? '';
   select.hidden = !opts.choices;
-  select.innerHTML = (opts.choices ?? []).map((c) => `<option>${c}</option>`).join('');
+  select.innerHTML = (opts.choices ?? [])
+    .map((c) => typeof c === 'string'
+      ? option(c)
+      : `<optgroup label="${esc(c.group)}">${c.options.map((o) => option(o.value, o.label)).join('')}</optgroup>`)
+    .join('');
   dialog.returnValue = '';
   dialog.showModal();
   if (!input.hidden) {
@@ -203,10 +213,18 @@ $('tree').addEventListener('click', async (e) => {
 });
 
 $('new-deck').addEventListener('click', async () => {
-  const r = await ask('Nova apresentação', { text: 'Nome da pasta em slides/ e tema inicial.', value: 'minha-palestra', choices: THEMES, ok: 'Criar' });
+  const choices: Choice[] = [{ group: 'Tema', options: THEMES.map((t) => ({ value: `theme:${t}`, label: t })) }];
+  if (templates.length) {
+    choices.unshift({
+      group: 'Template (com os slides iniciais dele)',
+      options: templates.filter((t) => !t.error).map((t) => ({ value: `template:${t.name}`, label: t.title ?? t.name })),
+    });
+  }
+  const r = await ask('Nova apresentação', { text: 'Nome da pasta em slides/ e o ponto de partida.', value: 'minha-palestra', choices, ok: 'Criar' });
   if (!r?.value) return;
+  const [kind, value] = r.choice.split(':');
   try {
-    const { path } = await api('deck', { method: 'POST', json: { name: r.value, theme: r.choice } });
+    const { path } = await api('deck', { method: 'POST', json: { name: r.value, [kind]: value } });
     open.add(deckOf(path));
     await refreshTree();
     await openFile(path);
@@ -231,9 +249,9 @@ function frontmatterCompletions(ctx: CompletionContext): CompletionResult | null
   for (let n = 2; n < line.number; n++) if (doc.line(n).text.trim() === '---') return null;
 
   const before = line.text.slice(0, ctx.pos - line.from);
-  const value = before.match(/^(layout|theme|imagePosition|steps):\s*(\w*)$/);
+  const value = before.match(/^(layout|theme|template|imagePosition|steps):\s*([\w-]*)$/);
   if (value) {
-    const opts = { layout: LAYOUTS, theme: THEMES, imagePosition: ['left', 'right'], steps: ['true', 'false'] }[value[1]]!;
+    const opts = { layout: LAYOUTS, theme: THEMES, template: TEMPLATE_NAMES, imagePosition: ['left', 'right'], steps: ['true', 'false'] }[value[1]]!;
     return { from: ctx.pos - value[2].length, options: opts.map((label) => ({ label, type: 'enum' })) };
   }
   const key = before.match(/^(\w*)$/);
@@ -276,7 +294,7 @@ async function checkFrontmatter(v: EditorView): Promise<Diagnostic[]> {
   const text = v.state.doc.toString();
   let problems: Problem[] = [];
   try {
-    ({ diagnostics: problems } = await api<{ diagnostics: Problem[] }>('validate', { method: 'POST', body: text }));
+    ({ diagnostics: problems } = await api<{ diagnostics: Problem[] }>(`validate?${q(current)}`, { method: 'POST', body: text }));
   } catch {
     return [];
   }
@@ -372,6 +390,7 @@ function flush(): Promise<void> {
 async function openFile(path: string, keepView = false) {
   if (path !== current) await flush();
   if (editingTheme) closeTheme();
+  if (editingTemplate) closeTemplate();
   const { text } = await api<{ text: string }>(`file?${q(path)}`);
   const sameFile = path === current;
   current = path;
@@ -591,6 +610,7 @@ iframe.addEventListener('load', () => {
   retries = 0;
   previewReady = true;
   if (editingTheme) return postTheme();
+  if (editingTemplate) return;
   // Depois de um recarregamento (o Astro recarrega a cada salvamento), garante o slide certo.
   if (current && deckOf(current) === previewDeck && indexOf(current) >= 0) {
     iframe.contentWindow?.postMessage({ type: 'editor:go', index: indexOf(current) }, '*');
@@ -716,6 +736,7 @@ $('theme-list').addEventListener('click', async (e) => {
 async function openTheme(name: string) {
   await flush();
   if (editingTheme) closeTheme(); // salva o que estiver pendente
+  if (editingTemplate) closeTemplate();
   let data: ThemeFile;
   try {
     ({ theme: data } = await api<{ theme: ThemeFile }>(`theme?name=${encodeURIComponent(name)}`));
@@ -914,6 +935,389 @@ async function onThemeFileChange(name: string) {
   }
 }
 
+// ───────────────────────── templates ─────────────────────────
+// Um template (templates/<nome>/) é o padrão de uma instituição: logo, rodapé,
+// tema, tamanho das fontes, animações e os slides iniciais.
+
+type TemplateFile = {
+  name?: string;
+  theme?: string;
+  lockTheme: boolean;
+  logo?: string;
+  logoPosition: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  logoSize: number;
+  logoOnCover: boolean;
+  footer: string;
+  slideNumbers: boolean;
+  textSize: number;
+  titleSize: number;
+  animations: boolean;
+};
+type TemplateItem = { name: string; title?: string; error?: string };
+
+let templates: TemplateItem[] = [];
+let editingTemplate: string | null = null;
+let templateData: TemplateFile | null = null;
+let templateMeta = { slides: [] as string[], logoUrl: null as string | null };
+let templateDeck: string | null = null; // apresentação usada para visualizar o template
+let templateTimer: number | undefined;
+const tplPanel = $<HTMLFormElement>('template-panel');
+
+const POSITIONS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const;
+const POS_LABELS: Record<string, string> = {
+  'top-left': '↖ Em cima, à esquerda',
+  'top-right': '↗ Em cima, à direita',
+  'bottom-left': '↙ Embaixo, à esquerda',
+  'bottom-right': '↘ Embaixo, à direita',
+};
+const pct = (n: number) => `${Math.round(n * 100)}%`;
+
+async function refreshTemplates() {
+  templates = await api<TemplateItem[]>('templates');
+  TEMPLATE_NAMES = templates.map((t) => t.name);
+  renderTemplates();
+}
+
+function renderTemplates() {
+  $('template-list').innerHTML = templates.length
+    ? templates
+        .map((t) => `<div class="theme-item${t.error ? ' broken' : ''}${t.name === editingTemplate ? ' active' : ''}" data-template-name="${esc(t.name)}" title="${esc(t.error ?? `templates/${t.name}/`)}">
+          <span class="label">${esc(t.title ?? t.name)}</span>
+          <button class="icon" data-act="copy-template" title="Criar um template a partir deste">${ICONS.plus}</button>
+          <button class="icon" data-act="delete-template" title="Excluir template">${ICONS.trash}</button>
+        </div>`)
+        .join('')
+    : '<p class="side-tip">Nenhum template. Um template fixa logo, rodapé, fontes e animações para todas as apresentações de uma instituição.</p>';
+}
+
+async function newTemplate(base?: string) {
+  const r = await ask('Novo template', {
+    text: base
+      ? `Uma cópia de templates/${base}/ (com logo e slides iniciais).`
+      : 'Nome da pasta em templates/. Depois escolha logo, rodapé, fontes e animações.',
+    value: base ? `${base}-copia` : 'minha-instituicao',
+    ok: 'Criar',
+  });
+  if (!r?.value) return;
+  try {
+    const { name } = await api('template', { method: 'POST', json: { name: r.value, base } });
+    await refreshTemplates();
+    await openTemplate(name);
+  } catch (err) {
+    toast((err as Error).message, true);
+  }
+}
+
+$('new-template').addEventListener('click', () => newTemplate());
+
+$('template-list').addEventListener('click', async (e) => {
+  const el = e.target as HTMLElement;
+  const name = el.closest<HTMLElement>('[data-template-name]')?.dataset.templateName;
+  if (!name) return;
+  const act = el.closest<HTMLElement>('[data-act]')?.dataset.act;
+  if (act === 'copy-template') return newTemplate(name);
+  if (act === 'delete-template') {
+    const r = await ask('Excluir template?', {
+      text: `A pasta templates/${name}/ (logo e slides iniciais incluídos) será apagada. Apresentações que usam "${name}" ficam sem template.`,
+      ok: 'Excluir',
+      danger: true,
+    });
+    if (!r) return;
+    await api(`template?name=${encodeURIComponent(name)}`, { method: 'DELETE' }).catch((err) => toast(err.message, true));
+    if (editingTemplate === name) closeTemplate(true);
+    return refreshTemplates();
+  }
+  openTemplate(name);
+});
+
+async function loadTemplate(name: string) {
+  const r = await api<{ template: TemplateFile; slides: string[]; logoUrl: string | null }>(`template?name=${encodeURIComponent(name)}`);
+  templateMeta = { slides: r.slides, logoUrl: r.logoUrl };
+  return r.template;
+}
+
+async function openTemplate(name: string) {
+  await flush();
+  if (editingTheme) closeTheme();
+  if (editingTemplate) closeTemplate();
+  let data: TemplateFile;
+  try {
+    data = await loadTemplate(name);
+  } catch (err) {
+    return toast(`templates/${name}/template.yaml: ${(err as Error).message}`, true);
+  }
+  templateDeck = current ? deckOf(current) : templateDeck ?? (decks.find((d) => d.name === 'exemplo') ?? decks[0])?.name ?? null;
+  if (current) closeFile();
+  editingTemplate = name;
+  templateData = data;
+
+  $('editor').hidden = true;
+  $('empty').hidden = true;
+  tplPanel.hidden = false;
+  $('crumb').innerHTML = `<span>templates/${esc(name)}/</span>template.yaml`;
+  setStatus('saved');
+  history.replaceState(null, '', `#template:${name}`);
+  renderTemplatePanel();
+  renderTemplates();
+
+  $('draft-note').hidden = true;
+  $('slide-count').textContent = templateDeck ? `prévia: ${templateDeck}` : '—';
+  if (!templateDeck) return;
+  // Página só do servidor de desenvolvimento: a apresentação com este template aplicado.
+  previewDeck = templateDeck;
+  previewReady = false;
+  retries = 0;
+  iframe.src = `/template-preview/${name}/${templateDeck}/?embed#1`;
+}
+
+/** Sai do modo template. `reset`: volta para a tela vazia. */
+function closeTemplate(reset = false) {
+  clearTimeout(templateTimer);
+  if (templateTimer !== undefined && editingTemplate && templateData) saveTemplate(editingTemplate, templateData);
+  editingTemplate = null;
+  templateData = null;
+  tplPanel.hidden = true;
+  $('editor').hidden = false;
+  previewReady = false; // o preview volta para a apresentação sem o template provisório
+  renderTemplates();
+  if (reset) {
+    closeFile();
+    iframe.removeAttribute('src');
+  }
+}
+
+async function saveTemplate(name: string, data: TemplateFile) {
+  templateTimer = undefined;
+  setStatus('saving');
+  try {
+    await api(`template?name=${encodeURIComponent(name)}`, { method: 'PUT', json: data });
+    if (name === editingTemplate) setStatus('saved');
+    const item = templates.find((t) => t.name === name);
+    if (item && item.title !== data.name) {
+      item.title = data.name;
+      renderTemplates();
+    }
+  } catch (err) {
+    setStatus('error');
+    toast((err as Error).message, true);
+  }
+}
+
+/** Salva pouco depois de mexer (o preview recarrega sozinho quando o arquivo muda). */
+function templateChanged(delay = 500) {
+  if (!editingTemplate || !templateData) return;
+  setStatus('dirty');
+  clearTimeout(templateTimer);
+  const [name, data] = [editingTemplate, structuredClone(templateData)];
+  templateTimer = window.setTimeout(() => saveTemplate(name, data), delay);
+}
+
+const checked = (on: boolean) => (on ? ' checked' : '');
+
+function renderTemplatePanel() {
+  const t = templateData!;
+  const n = esc(editingTemplate!);
+  const { slides, logoUrl } = templateMeta;
+  tplPanel.innerHTML = `
+    <header class="tp-head">
+      <div>
+        <h2 id="tpl-title">${esc(t.name || editingTemplate!)}</h2>
+        <p>Use com <code>template: ${n}</code> no primeiro slide. Fica em <code>templates/${n}/</code>: copie a pasta para compartilhar com outras pessoas.</p>
+      </div>
+      ${templateDeck ? `<button type="button" class="btn primary" id="apply-template">Usar em ${esc(templateDeck)}</button>` : ''}
+    </header>
+
+    <section>
+      <h3>Nome</h3>
+      <label class="field">
+        <input type="text" name="name" value="${esc(t.name ?? '')}" placeholder="Ex.: Universidade Federal de …" />
+        <small>Aparece na lista de templates e na página inicial.</small>
+      </label>
+    </section>
+
+    <section>
+      <h3>Logo</h3>
+      <div class="logo-box">
+        <div class="logo-prev">${logoUrl ? `<img src="${esc(logoUrl)}?v=${Date.now()}" alt="" />` : 'sem logo'}</div>
+        <button type="button" class="btn" id="logo-upload">${t.logo ? 'Trocar logo' : 'Enviar logo'}</button>
+        ${t.logo ? '<button type="button" class="btn" id="logo-remove">Remover</button>' : ''}
+      </div>
+      ${t.logo ? `
+        <div class="fields" style="margin-top: 14px">
+          ${radios('logoPosition', POSITIONS, POS_LABELS, t.logoPosition)}
+          <div class="ranges">
+            <label><span>Altura <output id="logoSize-out">${t.logoSize}px</output></span>
+              <input type="range" name="logoSize" min="24" max="300" step="2" value="${t.logoSize}" /></label>
+          </div>
+          <label class="check"><input type="checkbox" name="logoOnCover"${checked(t.logoOnCover)} /> Mostrar também na capa</label>
+        </div>` : ''}
+    </section>
+
+    <section>
+      <h3>Tema</h3>
+      <div class="fields">
+        <label class="field">
+          <select name="theme">${['', ...THEMES].map((o) => `<option value="${esc(o)}"${o === (t.theme ?? '') ? ' selected' : ''}>${o ? esc(o) : '— nenhum: cada apresentação escolhe'}</option>`).join('')}</select>
+        </label>
+        <label class="check"><input type="checkbox" name="lockTheme"${checked(t.lockTheme)} /> Travar o tema <small>o <code>theme</code> dos slides é ignorado</small></label>
+      </div>
+    </section>
+
+    <section>
+      <h3>Rodapé</h3>
+      <div class="fields">
+        <label class="field">
+          <input type="text" name="footer" value="${esc(t.footer)}" placeholder="vazio = sem texto" />
+          <small><code>{title}</code> vira o nome da apresentação.</small>
+        </label>
+        <label class="check"><input type="checkbox" name="slideNumbers"${checked(t.slideNumbers)} /> Numerar os slides</label>
+      </div>
+    </section>
+
+    <section>
+      <h3>Tamanho das letras</h3>
+      <div class="ranges">
+        <label><span>Texto <output id="textSize-out">${pct(t.textSize)}</output></span>
+          <input type="range" name="textSize" min="0.6" max="1.6" step="0.05" value="${t.textSize}" /></label>
+        <label><span>Títulos <output id="titleSize-out">${pct(t.titleSize)}</output></span>
+          <input type="range" name="titleSize" min="0.6" max="1.6" step="0.05" value="${t.titleSize}" /></label>
+      </div>
+    </section>
+
+    <section>
+      <h3>Animações</h3>
+      <label class="check"><input type="checkbox" name="animations"${checked(t.animations)} /> Transições entre slides e itens revelados aos poucos <small>desligado: tudo aparece de uma vez</small></label>
+    </section>
+
+    <section>
+      <h3>Slides iniciais</h3>
+      <div class="starters">
+        <p>${slides.length
+          ? `${slides.length} ${slides.length === 1 ? 'slide copiado' : 'slides copiados'} para cada apresentação nova criada com este template.`
+          : 'Nenhum: apresentações novas com este template começam só com uma capa.'}</p>
+        ${templateDeck ? `<button type="button" class="btn" id="save-starters">Usar os slides de ${esc(templateDeck)}</button>` : ''}
+      </div>
+    </section>
+  `;
+}
+
+tplPanel.addEventListener('input', (e) => {
+  const el = e.target as HTMLInputElement;
+  const t = templateData;
+  if (!t || !el.name) return;
+  let delay = 500;
+  switch (el.name) {
+    case 'name':
+      t.name = el.value.trim() || undefined;
+      $('tpl-title').textContent = t.name || editingTemplate!;
+      delay = 900;
+      break;
+    case 'footer':
+      t.footer = el.value;
+      delay = 900;
+      break;
+    case 'theme':
+      t.theme = el.value || undefined;
+      break;
+    case 'logoPosition':
+      t.logoPosition = el.value as TemplateFile['logoPosition'];
+      break;
+    case 'logoSize':
+      t.logoSize = Number(el.value);
+      $('logoSize-out').textContent = `${el.value}px`;
+      break;
+    case 'textSize':
+    case 'titleSize':
+      (t as any)[el.name] = Number(el.value);
+      $(`${el.name}-out`).textContent = pct(Number(el.value));
+      break;
+    case 'lockTheme':
+    case 'logoOnCover':
+    case 'slideNumbers':
+    case 'animations':
+      (t as any)[el.name] = el.checked;
+      break;
+    default:
+      return;
+  }
+  templateChanged(delay);
+});
+tplPanel.addEventListener('submit', (e) => e.preventDefault());
+
+tplPanel.addEventListener('click', async (e) => {
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[id]');
+  const name = editingTemplate;
+  if (!btn || !name || !templateData) return;
+  try {
+    if (btn.id === 'logo-upload') {
+      $('logo-input').click();
+    } else if (btn.id === 'logo-remove') {
+      templateData.logo = undefined;
+      templateMeta.logoUrl = null;
+      renderTemplatePanel();
+      templateChanged(0);
+    } else if (btn.id === 'apply-template' && templateDeck) {
+      await api('use-template', { method: 'POST', json: { name, deck: templateDeck } });
+      toast(`${templateDeck} agora usa o template ${templateData.name ?? name}`);
+    } else if (btn.id === 'save-starters' && templateDeck) {
+      const r = await ask('Trocar os slides iniciais?', {
+        text: `Os slides de slides/${templateDeck}/ serão copiados para templates/${name}/ e substituem os atuais. Apresentações novas com este template começam com eles.`,
+        ok: 'Copiar slides',
+      });
+      if (!r) return;
+      const { slides } = await api('template-slides', { method: 'POST', json: { name, deck: templateDeck } });
+      templateMeta.slides = (await api(`template?name=${encodeURIComponent(name)}`)).slides;
+      renderTemplatePanel();
+      toast(`${slides} slides copiados para o template`);
+    }
+  } catch (err) {
+    toast((err as Error).message, true);
+  }
+});
+
+$<HTMLInputElement>('logo-input').addEventListener('change', async (e) => {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  const name = editingTemplate;
+  if (!file || !name) return;
+  // Alterações pendentes primeiro, para o servidor não sobrescrevê-las.
+  if (templateTimer !== undefined && templateData) {
+    clearTimeout(templateTimer);
+    await saveTemplate(name, templateData);
+  }
+  try {
+    const res = await fetch(`/__editor/api/template-logo?name=${encodeURIComponent(name)}&file=${encodeURIComponent(file.name)}`, { method: 'POST', body: file });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    if (name !== editingTemplate) return;
+    templateData = await loadTemplate(name);
+    renderTemplatePanel();
+    toast(`Logo salva em templates/${name}/${data.logo}`);
+  } catch (err) {
+    toast((err as Error).message, true);
+  }
+});
+
+async function onTemplateFileChange(name: string) {
+  await refreshTemplates();
+  if (name !== editingTemplate) return;
+  if (!TEMPLATE_NAMES.includes(name)) {
+    toast(`templates/${name}/ foi removido.`, true);
+    return closeTemplate(true);
+  }
+  if (templateTimer !== undefined) return; // há alterações nossas para salvar
+  try {
+    const before = JSON.stringify([templateData, templateMeta.slides]);
+    const data = await loadTemplate(name);
+    if (JSON.stringify([data, templateMeta.slides]) === before) return; // eco do nosso salvamento
+    templateData = data;
+    renderTemplatePanel();
+  } catch (err) {
+    toast(`templates/${name}/template.yaml: ${(err as Error).message}`, true);
+  }
+}
+
 // ───────────────────────── mudanças no disco ─────────────────────────
 
 let treeTimer: number | undefined;
@@ -921,6 +1325,7 @@ const events = new EventSource('/__editor/api/events');
 events.onmessage = async (e) => {
   const { kind, path } = JSON.parse(e.data) as { kind: string; path: string };
   if (kind === 'themes') return onThemeFileChange(path);
+  if (kind === 'templates') return onTemplateFileChange(path);
   if (kind !== 'change') {
     clearTimeout(treeTimer);
     treeTimer = window.setTimeout(async () => {
@@ -948,6 +1353,10 @@ events.onmessage = async (e) => {
 };
 
 window.addEventListener('beforeunload', (e) => {
+  if (templateTimer !== undefined && editingTemplate && templateData) {
+    saveTemplate(editingTemplate, templateData);
+    e.preventDefault();
+  }
   if (themeTimer !== undefined && editingTheme && themeData) {
     saveTheme(editingTheme, themeData);
     e.preventDefault();
@@ -961,9 +1370,10 @@ window.addEventListener('beforeunload', (e) => {
 // ───────────────────────── início ─────────────────────────
 
 (async () => {
-  await Promise.all([refreshTree(), refreshThemes()]);
+  await Promise.all([refreshTree(), refreshThemes(), refreshTemplates()]);
   const hash = decodeURIComponent(location.hash.slice(1));
   if (hash.startsWith('tema:') && themes.some((t) => t.name === hash.slice(5) && !t.builtin)) return openTheme(hash.slice(5));
+  if (hash.startsWith('template:') && TEMPLATE_NAMES.includes(hash.slice(9))) return openTemplate(hash.slice(9));
   const all = decks.flatMap((d) => d.files.map((f) => `${d.name}/${f}`));
   const wanted = [hash, store.get('editor:last') ?? ''].find((p) => all.includes(p));
   if (wanted) await openFile(wanted);

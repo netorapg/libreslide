@@ -14,3 +14,7 @@ public/img/*
 # Temas criados por você também. Só o de exemplo sobe.
 themes/*
 !themes/oceano.yaml
+
+# Templates também. Só o de exemplo sobe.
+templates/*
+!templates/instituicao-exemplo/
