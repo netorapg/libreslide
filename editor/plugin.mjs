@@ -1,4 +1,4 @@
-// Editor estilo Overleaf para os slides — só existe no `npm run dev`.
+// Editor de slides no navegador — só existe no `npm run dev`.
 // Abre em http://localhost:4321/__editor/
 import { readFile, writeFile, readdir, mkdir, rm, rename, stat, cp, copyFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';

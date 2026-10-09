@@ -19,7 +19,7 @@ export default defineConfig({
     },
   },
   vite: {
-    // Editor estilo Overleaf em /__editor/ (só no `npm run dev`).
+    // Editor no navegador em /__editor/ (só no `npm run dev`).
     plugins: [slideEditor()],
     server: { fs: { allow: [APP, deps, WORKSPACE] } },
   },

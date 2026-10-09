@@ -32,7 +32,7 @@ npm run nova -- minha-palestra [tema ou template]   # aurora, paper, noir, sunse
 npm run build          # gera um site estático em dist/
 ```
 
-## Editor (estilo Overleaf)
+## Editor
 
 `npm run editor` abre um editor no navegador: arquivos à esquerda, o `.md` no meio e o slide de verdade à direita, atualizando a cada alteração.
 
