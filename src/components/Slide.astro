@@ -1,6 +1,6 @@
 ---
 import { render } from 'astro:content';
-import { asset, inline, type SlideEntry } from '../lib/decks';
+import { asset, getThemes, inline, resolveTheme, type SlideEntry } from '../lib/decks';
 
 interface Props {
   slide: SlideEntry;
@@ -13,7 +13,8 @@ interface Props {
 const { slide, index, total, deckTitle, deckTheme } = Astro.props;
 const { Content } = await render(slide);
 const d = slide.data;
-const theme = d.theme ?? deckTheme;
+const { info } = await getThemes();
+const theme = resolveTheme(info, d.theme, deckTheme);
 const big = d.layout === 'cover' || d.layout === 'section';
 const Title = big ? 'h1' : 'h2';
 const hasHead = d.kicker || d.title || d.subtitle;
@@ -22,7 +23,9 @@ const pad = (n: number) => String(n).padStart(2, '0');
 
 <section
   class:list={['slide', `layout-${d.layout}`, d.image && 'has-image']}
-  data-theme={theme}
+  data-theme={theme.name}
+  data-bg={theme.background}
+  data-mode={theme.mode}
   data-steps={d.steps ? '' : undefined}
   data-notes={d.notes}
   style={d.accent ? `--accent: ${d.accent}; --accent-2: ${d.accent}` : undefined}

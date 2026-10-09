@@ -1,11 +1,12 @@
 import { getCollection, type CollectionEntry } from 'astro:content';
+import { builtinInfo, themeCss, type ThemeInfo } from './themes';
 
 export type SlideEntry = CollectionEntry<'slides'>;
 
 export interface Deck {
   name: string;
   title: string;
-  theme: NonNullable<SlideEntry['data']['theme']>;
+  theme: string;
   slides: SlideEntry[];
 }
 
@@ -50,4 +51,27 @@ export function inline(s?: string) {
 
 export function stripInline(s: string) {
   return s.replace(/\*+/g, '').replace(/\n|<br\s*\/?>/g, ' ');
+}
+
+/** Todos os temas (prontos + themes/*.yaml) e o CSS dos personalizados. */
+export async function getThemes() {
+  const info: Record<string, ThemeInfo> = { ...builtinInfo };
+  let css = '';
+  for (const t of await getCollection('themes')) {
+    if (info[t.id]) {
+      console.warn(`[temas] themes/${t.id} tem o nome de um tema pronto e foi ignorado.`);
+      continue;
+    }
+    info[t.id] = { name: t.id, mode: t.data.mode, background: t.data.background, builtin: false };
+    css += themeCss(t.id, t.data) + '\n';
+  }
+  return { info, css };
+}
+
+/** Tema existente ou, se não existir, o padrão (com aviso no terminal). */
+export function resolveTheme(themes: Record<string, ThemeInfo>, name: string | undefined, fallback = 'aurora') {
+  if (!name) return themes[fallback] ?? builtinInfo.aurora;
+  if (themes[name]) return themes[name];
+  console.warn(`[temas] Tema "${name}" não existe; usando "${fallback}". Crie themes/${name}.yaml ou use: ${Object.keys(themes).join(', ')}.`);
+  return themes[fallback] ?? builtinInfo.aurora;
 }

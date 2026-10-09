@@ -94,7 +94,7 @@ body {
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
-[data-theme='paper'] .title em { font-style: italic; }
+.title em { font-style: var(--em-style); }
 .subtitle {
   margin: 28px 0 0;
   max-width: 1300px;
@@ -224,7 +224,7 @@ body {
   background: #ff5f57;
   box-shadow: 30px 0 #febc2e, 60px 0 #28c840;
 }
-.slide:is([data-theme='aurora'], [data-theme='noir'], [data-theme='sunset']) :is(.astro-code, .astro-code span) {
+.slide[data-mode='dark'] :is(.astro-code, .astro-code span) {
   color: var(--shiki-dark) !important;
 }
 

@@ -1,0 +1,974 @@
+import { EditorView, basicSetup } from 'codemirror';
+import { EditorState, type Extension } from '@codemirror/state';
+import { keymap } from '@codemirror/view';
+import { indentWithTab } from '@codemirror/commands';
+import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
+import { yamlFrontmatter } from '@codemirror/lang-yaml';
+import { languages } from '@codemirror/language-data';
+import { oneDark } from '@codemirror/theme-one-dark';
+import type { CompletionContext, CompletionResult } from '@codemirror/autocomplete';
+import { backgrounds, fonts, themeCss, type ThemeFile } from '../src/lib/themes';
+import { linter, type Diagnostic } from '@codemirror/lint';
+
+// Espelha src/content.config.ts
+const LAYOUTS = ['default', 'cover', 'section', 'center', 'statement', 'quote', 'split', 'image', 'columns'];
+// Lista de temas (prontos + themes/*.yaml), atualizada pelo servidor.
+let THEMES = ['aurora', 'paper', 'noir', 'sunset'];
+const KEYS: Record<string, string> = {
+  layout: 'Tipo de slide',
+  title: 'Título (*texto* = destaque)',
+  subtitle: 'Subtítulo',
+  kicker: 'Rótulo acima do título',
+  theme: 'Tema (no 1º slide vale para tudo)',
+  deckTitle: 'Nome da apresentação (1º slide)',
+  author: 'Autor',
+  date: 'Data',
+  image: 'Imagem (/img/...)',
+  imagePosition: 'left | right',
+  accent: 'Cor de destaque',
+  steps: 'Revela listas aos poucos',
+  notes: 'Notas do apresentador',
+};
+
+const SNIPPETS: { label: string; text: string }[] = [
+  { label: 'Cartões', text: '<div class="cards">\n\n<div>\n\n### Um\n\nTexto do cartão.\n\n</div>\n<div>\n\n### Dois\n\nTexto do cartão.\n\n</div>\n\n</div>\n' },
+  { label: 'Número em destaque', text: '<span class="stat">42%</span>' },
+  { label: 'Separador de colunas', text: '\n***\n\n' },
+  { label: 'Item em etapa', text: '<p class="step">Aparece no próximo clique</p>' },
+  { label: 'Bloco de código', text: '```ts\nconst ola = "mundo";\n```\n' },
+  { label: 'Tabela', text: '| Coluna | Coluna |\n| ------ | ------ |\n| a      | b      |\n' },
+  { label: 'Citação', text: '> Uma frase marcante.\n' },
+];
+
+// ───────────────────────── estado ─────────────────────────
+
+type Deck = { name: string; files: string[] };
+let decks: Deck[] = [];
+let current: string | null = null; // "deck/arquivo.md"
+let saved = ''; // conteúdo que está no disco
+let saveTimer: number | undefined;
+let saving: Promise<void> = Promise.resolve();
+let previewDeck: string | null = null;
+let previewReady = false;
+const open = new Set<string>();
+
+const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+const byName = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true });
+const deckOf = (p: string) => p.split('/')[0];
+const fileOf = (p: string) => p.split('/')[1];
+const visible = (deck: string) =>
+  (decks.find((d) => d.name === deck)?.files ?? []).filter((f) => !f.startsWith('_')).sort(byName);
+const indexOf = (p: string) => visible(deckOf(p)).indexOf(fileOf(p));
+
+const store = {
+  get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch {} },
+};
+
+async function api<T = any>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
+  const { json, ...rest } = init;
+  if (json !== undefined) {
+    rest.body = JSON.stringify(json);
+    rest.headers = { 'Content-Type': 'application/json' };
+  }
+  const res = await fetch(`/__editor/api/${path}`, rest);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? res.statusText);
+  return data;
+}
+const q = (p: string) => `path=${encodeURIComponent(p)}`;
+
+// ───────────────────────── interface ─────────────────────────
+
+function toast(msg: string, error = false) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.toggle('error', error);
+  t.hidden = false;
+  clearTimeout((t as any).timer);
+  (t as any).timer = setTimeout(() => (t.hidden = true), error ? 5000 : 2500);
+}
+
+function setStatus(state: 'idle' | 'dirty' | 'saving' | 'saved' | 'error', text = '') {
+  const s = $('status');
+  s.dataset.state = state;
+  s.textContent = text || { idle: '', dirty: 'Editando…', saving: 'Salvando…', saved: 'Salvo', error: 'Erro ao salvar' }[state];
+}
+
+/** Diálogo simples: texto (input) ou escolha (select). Resolve null se cancelar. */
+function ask(title: string, opts: { text?: string; value?: string; choices?: string[]; ok?: string; danger?: boolean } = {}) {
+  const dialog = $<HTMLDialogElement>('dialog');
+  const input = $<HTMLInputElement>('dialog-input');
+  const select = $<HTMLSelectElement>('dialog-select');
+  $('dialog-title').textContent = title;
+  $('dialog-text').textContent = opts.text ?? '';
+  $('dialog-text').hidden = !opts.text;
+  $('dialog-ok').textContent = opts.ok ?? 'OK';
+  $('dialog-ok').classList.toggle('danger', !!opts.danger);
+  input.hidden = opts.value === undefined;
+  input.value = opts.value ?? '';
+  select.hidden = !opts.choices;
+  select.innerHTML = (opts.choices ?? []).map((c) => `<option>${c}</option>`).join('');
+  dialog.returnValue = '';
+  dialog.showModal();
+  if (!input.hidden) {
+    input.focus();
+    const dot = input.value.lastIndexOf('.');
+    input.setSelectionRange(0, dot > 0 ? dot : input.value.length);
+  }
+  return new Promise<{ value: string; choice: string } | null>((done) =>
+    dialog.addEventListener(
+      'close',
+      () => done(dialog.returnValue === 'ok' ? { value: input.value.trim(), choice: select.value } : null),
+      { once: true },
+    ),
+  );
+}
+
+const icon = (d: string) => `<svg viewBox="0 0 24 24">${d}</svg>`;
+const ICONS = {
+  caret: icon('<path d="m9 18 6-6-6-6"/>'),
+  plus: icon('<path d="M12 5v14M5 12h14"/>'),
+  edit: icon('<path d="M4 20h4L19 9l-4-4L4 16z"/>'),
+  trash: icon('<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'),
+};
+const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+
+function renderTree() {
+  $('tree').innerHTML = decks
+    .map((d) => {
+      const isOpen = open.has(d.name);
+      const files = [...d.files]
+        .sort((a, b) => Number(a.startsWith('_')) - Number(b.startsWith('_')) || byName(a, b))
+        .map((f) => {
+          const p = `${d.name}/${f}`;
+          const m = f.match(/^(\d+)[-_ ]?(.*)\.md$/);
+          const label = m ? `<i>${m[1]}</i>${esc(m[2])}` : esc(f.replace(/\.md$/, ''));
+          return `<li class="file${p === current ? ' active' : ''}${f.startsWith('_') ? ' draft' : ''}" data-path="${esc(p)}">
+            <span class="label">${label}</span>
+            <button class="icon" data-act="rename" title="Renomear">${ICONS.edit}</button>
+            <button class="icon" data-act="delete" title="Excluir">${ICONS.trash}</button>
+          </li>`;
+        })
+        .join('');
+      return `<div class="deck${isOpen ? ' open' : ''}" data-deck="${esc(d.name)}">
+        <div class="deck-row">
+          <span class="caret">${ICONS.caret}</span>
+          <span class="label">${esc(d.name)}</span>
+          <span class="n">${d.files.length}</span>
+          <button class="icon" data-act="new-slide" title="Novo slide">${ICONS.plus}</button>
+        </div>
+        <ul>${files}</ul>
+      </div>`;
+    })
+    .join('');
+}
+
+$('tree').addEventListener('click', async (e) => {
+  const el = e.target as HTMLElement;
+  const act = el.closest<HTMLElement>('[data-act]')?.dataset.act;
+  const file = el.closest<HTMLElement>('.file')?.dataset.path;
+  const deck = el.closest<HTMLElement>('.deck')!.dataset.deck!;
+  try {
+    if (act === 'new-slide') {
+      const r = await ask('Novo slide', { text: `Em slides/${deck}/`, value: 'Novo slide', ok: 'Criar' });
+      if (!r?.value) return;
+      const { path } = await api('slide', { method: 'POST', json: { deck, name: r.value } });
+      open.add(deck);
+      await refreshTree();
+      await openFile(path);
+    } else if (act === 'rename' && file) {
+      const r = await ask('Renomear', { text: 'A ordem dos slides segue o nome do arquivo (01-, 02-, …). Comece com _ para virar rascunho.', value: fileOf(file), ok: 'Renomear' });
+      if (!r?.value || r.value === fileOf(file)) return;
+      const to = `${deck}/${r.value.endsWith('.md') ? r.value : r.value + '.md'}`;
+      if (file === current) await flush();
+      await api('rename', { method: 'POST', json: { from: file, to } });
+      await refreshTree();
+      if (file === current) await openFile(to);
+    } else if (act === 'delete' && file) {
+      const r = await ask('Excluir slide?', { text: `slides/${file} será apagado do disco.`, ok: 'Excluir', danger: true });
+      if (!r) return;
+      await api(`file?${q(file)}`, { method: 'DELETE' });
+      if (file === current) closeFile();
+      await refreshTree();
+    } else if (file) {
+      await openFile(file);
+    } else {
+      open.has(deck) ? open.delete(deck) : open.add(deck);
+      renderTree();
+    }
+  } catch (err) {
+    toast((err as Error).message, true);
+  }
+});
+
+$('new-deck').addEventListener('click', async () => {
+  const r = await ask('Nova apresentação', { text: 'Nome da pasta em slides/ e tema inicial.', value: 'minha-palestra', choices: THEMES, ok: 'Criar' });
+  if (!r?.value) return;
+  try {
+    const { path } = await api('deck', { method: 'POST', json: { name: r.value, theme: r.choice } });
+    open.add(deckOf(path));
+    await refreshTree();
+    await openFile(path);
+  } catch (err) {
+    toast((err as Error).message, true);
+  }
+});
+
+async function refreshTree() {
+  decks = await api<Deck[]>('tree');
+  renderTree();
+  updatePreviewBar();
+}
+
+// ───────────────────────── editor ─────────────────────────
+
+function frontmatterCompletions(ctx: CompletionContext): CompletionResult | null {
+  const doc = ctx.state.doc;
+  const line = doc.lineAt(ctx.pos);
+  // Só dentro do bloco --- ... --- do topo
+  if (doc.line(1).text.trim() !== '---' || line.number === 1) return null;
+  for (let n = 2; n < line.number; n++) if (doc.line(n).text.trim() === '---') return null;
+
+  const before = line.text.slice(0, ctx.pos - line.from);
+  const value = before.match(/^(layout|theme|imagePosition|steps):\s*(\w*)$/);
+  if (value) {
+    const opts = { layout: LAYOUTS, theme: THEMES, imagePosition: ['left', 'right'], steps: ['true', 'false'] }[value[1]]!;
+    return { from: ctx.pos - value[2].length, options: opts.map((label) => ({ label, type: 'enum' })) };
+  }
+  const key = before.match(/^(\w*)$/);
+  if (key && (key[1] || ctx.explicit)) {
+    return {
+      from: line.from,
+      options: Object.entries(KEYS).map(([k, info]) => ({ label: k, detail: info, type: 'property', apply: `${k}: ` })),
+    };
+  }
+  return null;
+}
+
+function uploadAndInsert(files: FileList | File[], pos?: number) {
+  const images = [...files].filter((f) => f.type.startsWith('image/'));
+  if (!images.length) return false;
+  (async () => {
+    for (const file of images) {
+      try {
+        const res = await fetch(`/__editor/api/upload?name=${encodeURIComponent(file.name || 'imagem.png')}`, { method: 'POST', body: file });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        const at = pos ?? view.state.selection.main.head;
+        const text = `![](${data.src})`;
+        view.dispatch({ changes: { from: at, insert: text }, selection: { anchor: at + 2 } });
+        toast(`Imagem salva em public${data.src}`);
+      } catch (err) {
+        toast((err as Error).message, true);
+      }
+    }
+    view.focus();
+  })();
+  return true;
+}
+
+type Problem = { line: number; severity: 'error' | 'warning'; message: string };
+
+/** Valida o frontmatter no servidor, com o mesmo schema que o Astro usa. */
+async function checkFrontmatter(v: EditorView): Promise<Diagnostic[]> {
+  if (!current) return [];
+  const text = v.state.doc.toString();
+  let problems: Problem[] = [];
+  try {
+    ({ diagnostics: problems } = await api<{ diagnostics: Problem[] }>('validate', { method: 'POST', body: text }));
+  } catch {
+    return [];
+  }
+  if (v.state.doc.toString() !== text) return []; // já mudou; o próximo ciclo valida
+  showProblems(problems);
+  return problems.map((p) => {
+    const line = v.state.doc.line(Math.min(Math.max(p.line, 1), v.state.doc.lines));
+    return { from: line.from, to: line.to, severity: p.severity, message: p.message, source: 'frontmatter' };
+  });
+}
+
+function showProblems(problems: Problem[]) {
+  const el = $('problems');
+  const errors = problems.filter((p) => p.severity === 'error');
+  const first = errors[0] ?? problems[0];
+  el.hidden = !first;
+  if (!first) return;
+  el.classList.toggle('warning', !errors.length);
+  el.dataset.line = String(first.line);
+  el.innerHTML = `<b>Linha ${first.line}</b> ${esc(first.message)}${
+    errors.length ? '<span>O preview mostra a última versão válida.</span>' : ''
+  }${problems.length > 1 ? `<i>+${problems.length - 1}</i>` : ''}`;
+}
+
+$('problems').addEventListener('click', (e) => {
+  const n = Number((e.currentTarget as HTMLElement).dataset.line);
+  if (!n) return;
+  const line = view.state.doc.line(Math.min(n, view.state.doc.lines));
+  view.dispatch({ selection: { anchor: line.to }, scrollIntoView: true });
+  view.focus();
+});
+
+const extensions: Extension[] = [
+  basicSetup,
+  keymap.of([
+    indentWithTab,
+    { key: 'Mod-s', preventDefault: true, run: () => (flush(), true) },
+    { key: 'Mod-PageUp', preventDefault: true, run: () => (step(-1), true) },
+    { key: 'Mod-PageDown', preventDefault: true, run: () => (step(1), true) },
+  ]),
+  yamlFrontmatter({ content: markdown({ base: markdownLanguage, codeLanguages: languages }) }),
+  EditorState.languageData.of(() => [{ autocomplete: frontmatterCompletions }]),
+  oneDark,
+  EditorView.lineWrapping,
+  linter(checkFrontmatter, { delay: 400 }),
+  EditorView.updateListener.of((u) => {
+    if (!u.docChanged || !current) return;
+    syncLayoutSelect();
+    if (view.state.doc.toString() === saved) return setStatus('saved');
+    setStatus('dirty');
+    clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(flush, 700);
+  }),
+  EditorView.domEventHandlers({
+    drop: (e, v) => {
+      if (!e.dataTransfer?.files.length) return false;
+      e.preventDefault();
+      const pos = v.posAtCoords({ x: e.clientX, y: e.clientY }) ?? undefined;
+      return uploadAndInsert(e.dataTransfer.files, pos);
+    },
+    paste: (e) => {
+      if (!e.clipboardData?.files.length) return false;
+      e.preventDefault();
+      return uploadAndInsert(e.clipboardData.files);
+    },
+  }),
+];
+
+const view = new EditorView({ parent: $('editor'), state: EditorState.create({ extensions }) });
+
+/** Grava o arquivo aberto agora (se houver mudanças). */
+function flush(): Promise<void> {
+  clearTimeout(saveTimer);
+  saving = saving.then(async () => {
+    const path = current;
+    const text = view.state.doc.toString();
+    if (!path || text === saved) return;
+    setStatus('saving');
+    try {
+      await api(`file?${q(path)}`, { method: 'PUT', body: text });
+      if (path === current) {
+        saved = text;
+        setStatus(view.state.doc.toString() === saved ? 'saved' : 'dirty');
+      }
+    } catch (err) {
+      setStatus('error');
+      toast((err as Error).message, true);
+    }
+  });
+  return saving;
+}
+
+async function openFile(path: string, keepView = false) {
+  if (path !== current) await flush();
+  if (editingTheme) closeTheme();
+  const { text } = await api<{ text: string }>(`file?${q(path)}`);
+  const sameFile = path === current;
+  current = path;
+  saved = text;
+  const sel = view.state.selection.main;
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: text },
+    selection: sameFile ? { anchor: Math.min(sel.anchor, text.length), head: Math.min(sel.head, text.length) } : { anchor: 0 },
+    scrollIntoView: !sameFile,
+  });
+  setStatus('saved');
+
+  open.add(deckOf(path));
+  renderTree();
+  document.querySelector('.file.active')?.scrollIntoView({ block: 'nearest' });
+  $('crumb').innerHTML = `<span>slides/${esc(deckOf(path))}/</span>${esc(fileOf(path))}`;
+  $('tools').hidden = false;
+  $('present').hidden = false;
+  $('export').hidden = false;
+  $('empty').hidden = true;
+  syncLayoutSelect();
+  history.replaceState(null, '', `#${path}`);
+  store.set('editor:last', path);
+  if (!keepView) view.focus();
+  showPreview();
+}
+
+function closeFile() {
+  current = null;
+  saved = '';
+  view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: '' } });
+  $('crumb').textContent = 'Nenhum arquivo aberto';
+  $('tools').hidden = true;
+  $('present').hidden = true;
+  $('export').hidden = true;
+  $('empty').hidden = false;
+  $('problems').hidden = true;
+  setStatus('idle');
+  history.replaceState(null, '', location.pathname);
+}
+
+/** Abre o slide anterior/seguinte da mesma apresentação. */
+function step(delta: number) {
+  if (!current) return;
+  const files = visible(deckOf(current));
+  const i = Math.max(0, files.indexOf(fileOf(current)));
+  const next = files[Math.min(files.length - 1, Math.max(0, i + delta))];
+  if (next && next !== fileOf(current)) openFile(`${deckOf(current)}/${next}`);
+}
+$('prev').addEventListener('click', () => step(-1));
+$('next').addEventListener('click', () => step(1));
+
+// ── Layout no frontmatter ──
+
+$('layout').innerHTML = LAYOUTS.map((l) => `<option value="${l}">${l}</option>`).join('');
+
+function frontmatter() {
+  const doc = view.state.doc;
+  if (doc.lines < 2 || doc.line(1).text.trim() !== '---') return null;
+  for (let n = 2; n <= doc.lines; n++) if (doc.line(n).text.trim() === '---') return { start: 1, end: n };
+  return null;
+}
+
+function syncLayoutSelect() {
+  const fm = frontmatter();
+  let layout = 'default';
+  if (fm) {
+    for (let n = fm.start + 1; n < fm.end; n++) {
+      const m = view.state.doc.line(n).text.match(/^layout:\s*["']?(\w+)/);
+      if (m) layout = m[1];
+    }
+  }
+  $<HTMLSelectElement>('layout').value = layout;
+}
+
+$('layout').addEventListener('change', (e) => {
+  const value = (e.target as HTMLSelectElement).value;
+  const doc = view.state.doc;
+  const fm = frontmatter();
+  if (!fm) {
+    view.dispatch({ changes: { from: 0, insert: `---\nlayout: ${value}\n---\n\n` } });
+  } else {
+    let line = null;
+    for (let n = fm.start + 1; n < fm.end; n++) if (/^layout:/.test(doc.line(n).text)) line = doc.line(n);
+    view.dispatch({
+      changes: line
+        ? { from: line.from, to: line.to, insert: `layout: ${value}` }
+        : { from: doc.line(fm.start).to, insert: `\nlayout: ${value}` },
+    });
+  }
+  view.focus();
+});
+
+// ── Menu Inserir ──
+
+const menu = $('insert-menu');
+menu.innerHTML = SNIPPETS.map((s, i) => `<button data-i="${i}">${s.label}</button>`).join('');
+$('insert-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  menu.hidden = !menu.hidden;
+});
+document.addEventListener('click', () => (menu.hidden = true));
+menu.addEventListener('click', (e) => {
+  const i = (e.target as HTMLElement).closest<HTMLElement>('[data-i]')?.dataset.i;
+  if (i === undefined) return;
+  const text = SNIPPETS[+i].text;
+  const { from, to } = view.state.selection.main;
+  view.dispatch({ changes: { from, to, insert: text }, selection: { anchor: from + text.length } });
+  view.focus();
+});
+
+// ── Exportar ──
+
+const exportMenu = $('export-menu');
+$('export-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  menu.hidden = true;
+  exportMenu.hidden = !exportMenu.hidden;
+});
+document.addEventListener('click', () => (exportMenu.hidden = true));
+$('insert-btn').addEventListener('click', () => (exportMenu.hidden = true));
+
+// Sem Chrome/Chromium no computador, só a impressão pelo navegador funciona.
+api<{ browser: boolean }>('export?check').then(({ browser }) => {
+  if (browser) return;
+  for (const kind of ['pdf', 'png']) {
+    const b = exportMenu.querySelector<HTMLButtonElement>(`[data-export="${kind}"]`)!;
+    b.disabled = true;
+    b.querySelector('small')!.textContent = 'Precisa do Chrome ou Chromium instalado (ou CHROME_PATH)';
+  }
+}).catch(() => {});
+
+exportMenu.addEventListener('click', async (e) => {
+  const kind = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-export]')?.dataset.export;
+  if (!kind || !current) return;
+  const deck = deckOf(current);
+  await flush();
+  if (kind === 'print') {
+    window.open(`/${deck}/?print`, '_blank');
+    return;
+  }
+  const slide = Math.max(0, indexOf(current));
+  const wrap = $('export');
+  wrap.classList.add('busy');
+  toast(kind === 'pdf' ? `Gerando PDF de ${visible(deck).length} slides…` : 'Gerando PNG…');
+  try {
+    const res = await fetch(`/__editor/api/export?deck=${encodeURIComponent(deck)}&format=${kind}&slide=${slide}`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText);
+    const name = res.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] ?? `${deck}.${kind}`;
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(await res.blob()), download: name });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    toast(`${name} baixado`);
+  } catch (err) {
+    toast(`Não deu para exportar: ${(err as Error).message}`, true);
+  } finally {
+    wrap.classList.remove('busy');
+  }
+});
+
+$('image-btn').addEventListener('click', () => $('image-input').click());
+$<HTMLInputElement>('image-input').addEventListener('change', (e) => {
+  const input = e.target as HTMLInputElement;
+  if (input.files) uploadAndInsert(input.files);
+  input.value = '';
+});
+
+// ───────────────────────── preview ─────────────────────────
+
+const iframe = $<HTMLIFrameElement>('preview');
+
+function showPreview() {
+  if (!current) return;
+  const deck = deckOf(current);
+  const i = indexOf(current);
+  $('draft-note').hidden = i >= 0;
+  $<HTMLAnchorElement>('present').href = `/${deck}/#${Math.max(0, i) + 1}`;
+  updatePreviewBar();
+  if (i < 0) return;
+  if (deck !== previewDeck || !previewReady) {
+    retries = 0;
+    previewDeck = deck;
+    previewReady = false;
+    iframe.src = `/${deck}/?embed#${i + 1}`;
+  } else {
+    iframe.contentWindow?.postMessage({ type: 'editor:go', index: i }, '*');
+  }
+}
+
+function updatePreviewBar() {
+  if (!current) return ($('slide-count').textContent = '—');
+  const i = indexOf(current);
+  $('slide-count').textContent = i < 0 ? 'rascunho' : `${i + 1} / ${visible(deckOf(current)).length}`;
+}
+
+// O Astro leva um instante para registrar pastas/arquivos novos; se o preview
+// chegar antes (404 ou com slides a menos), tenta de novo algumas vezes.
+let retries = 0;
+let retryTimer: number | undefined;
+function previewIsStale() {
+  if (!previewDeck) return false;
+  let doc: Document | null = null;
+  try { doc = iframe.contentDocument; } catch {}
+  if (!doc) return false;
+  const stage = doc.getElementById('stage');
+  if (!stage) return !doc.querySelector('vite-error-overlay'); // 404 (não erro de compilação)
+  return Number(stage.dataset.count) < visible(previewDeck).length;
+}
+
+iframe.addEventListener('load', () => {
+  clearTimeout(retryTimer);
+  if (previewIsStale() && retries < 10) {
+    retries++;
+    retryTimer = window.setTimeout(() => iframe.contentWindow?.location.reload(), 400 + retries * 200);
+    return;
+  }
+  retries = 0;
+  previewReady = true;
+  if (editingTheme) return postTheme();
+  // Depois de um recarregamento (o Astro recarrega a cada salvamento), garante o slide certo.
+  if (current && deckOf(current) === previewDeck && indexOf(current) >= 0) {
+    iframe.contentWindow?.postMessage({ type: 'editor:go', index: indexOf(current) }, '*');
+  }
+});
+
+// Navegou no preview (setas/clique)? Abre o arquivo correspondente.
+window.addEventListener('message', (e) => {
+  if (e.source !== iframe.contentWindow || e.data?.type !== 'deck:slide' || !current) return;
+  if (deckOf(current) !== previewDeck) return;
+  const file = visible(previewDeck)[e.data.index];
+  if (file && file !== fileOf(current)) openFile(`${previewDeck}/${file}`, true);
+});
+
+// Ajusta a escala do slide de 1920×1080 dentro do quadro
+const frame = $('frame');
+new ResizeObserver(([e]) => {
+  const { width, height } = e.contentRect;
+  const s = Math.min(width / 1920, height / 1080);
+  iframe.style.width = `${1920 * s}px`;
+  iframe.style.height = `${1080 * s}px`;
+}).observe(frame);
+
+// ── Divisória arrastável ──
+
+const main = $('main');
+const setSplit = (px: number) => main.style.setProperty('--preview-w', `${Math.round(px)}px`);
+const savedSplit = Number(store.get('editor:split'));
+if (savedSplit) setSplit(savedSplit);
+$('gutter').addEventListener('pointerdown', (e) => {
+  const gutter = e.currentTarget as HTMLElement;
+  gutter.setPointerCapture(e.pointerId);
+  main.classList.add('dragging');
+  const move = (ev: PointerEvent) => {
+    const w = Math.min(Math.max(window.innerWidth - ev.clientX, 280), window.innerWidth - 520);
+    setSplit(w);
+    store.set('editor:split', String(Math.round(w)));
+  };
+  const up = () => {
+    main.classList.remove('dragging');
+    gutter.removeEventListener('pointermove', move);
+  };
+  gutter.addEventListener('pointermove', move);
+  gutter.addEventListener('pointerup', up, { once: true });
+});
+
+// ───────────────────────── temas ─────────────────────────
+
+type ThemeItem = { name: string; builtin: boolean };
+let themes: ThemeItem[] = [];
+let editingTheme: string | null = null;
+let themeData: ThemeFile | null = null;
+let themeDeck: string | null = null; // apresentação usada para visualizar o tema
+let themeTimer: number | undefined;
+const panel = $<HTMLFormElement>('theme-panel');
+
+const COLOR_FIELDS: [keyof ThemeFile['colors'], string, string][] = [
+  ['background', 'Fundo', ''],
+  ['text', 'Texto', ''],
+  ['muted', 'Texto secundário', 'subtítulos, rodapé'],
+  ['accent', 'Destaque', 'negrito, marcadores e luzes do fundo'],
+  ['accent2', 'Destaque 2', 'gradiente dos títulos'],
+  ['accent3', 'Destaque 3', 'gradiente dos títulos'],
+];
+const BG_LABELS: Record<string, string> = { aurora: 'Aurora', paper: 'Papel', noir: 'Pontos', sunset: 'Pôr do sol', plain: 'Liso' };
+const FONT_LABELS: Record<string, string> = { sans: 'Sem serifa', serif: 'Serifada', mono: 'Mono' };
+
+async function refreshThemes() {
+  themes = await api<ThemeItem[]>('themes');
+  THEMES = themes.map((t) => t.name);
+  renderThemes();
+}
+
+function renderThemes() {
+  $('theme-list').innerHTML = themes
+    .map((t) => `<div class="theme-item${t.builtin ? ' builtin' : ''}${t.name === editingTheme ? ' active' : ''}" data-theme-name="${esc(t.name)}">
+      <span class="label">${esc(t.name)}</span>
+      ${t.builtin
+        ? `<span class="tag">pronto</span><button class="icon" data-act="copy" title="Criar um tema a partir deste">${ICONS.plus}</button>`
+        : `<button class="icon" data-act="delete-theme" title="Excluir tema">${ICONS.trash}</button>`}
+    </div>`)
+    .join('');
+}
+
+async function newTheme(base = editingTheme ?? 'aurora') {
+  const r = await ask('Novo tema', {
+    text: 'Nome do tema (vira themes/<nome>.yaml) e o tema de partida.',
+    value: 'meu-tema',
+    choices: [base, ...THEMES.filter((t) => t !== base)],
+    ok: 'Criar',
+  });
+  if (!r?.value) return;
+  try {
+    const { name } = await api('theme', { method: 'POST', json: { name: r.value, base: r.choice } });
+    await refreshThemes();
+    await openTheme(name);
+  } catch (err) {
+    toast((err as Error).message, true);
+  }
+}
+
+$('new-theme').addEventListener('click', () => newTheme());
+
+$('theme-list').addEventListener('click', async (e) => {
+  const el = e.target as HTMLElement;
+  const name = el.closest<HTMLElement>('[data-theme-name]')?.dataset.themeName;
+  if (!name) return;
+  const act = el.closest<HTMLElement>('[data-act]')?.dataset.act;
+  const item = themes.find((t) => t.name === name)!;
+  if (act === 'delete-theme') {
+    const r = await ask('Excluir tema?', { text: `themes/${name}.yaml será apagado. Slides que usam "${name}" voltam ao tema padrão.`, ok: 'Excluir', danger: true });
+    if (!r) return;
+    await api(`theme?name=${encodeURIComponent(name)}`, { method: 'DELETE' }).catch((err) => toast(err.message, true));
+    if (editingTheme === name) closeTheme(true);
+    await refreshThemes();
+  } else if (item.builtin) {
+    newTheme(name);
+  } else {
+    openTheme(name);
+  }
+});
+
+async function openTheme(name: string) {
+  await flush();
+  if (editingTheme) closeTheme(); // salva o que estiver pendente
+  let data: ThemeFile;
+  try {
+    ({ theme: data } = await api<{ theme: ThemeFile }>(`theme?name=${encodeURIComponent(name)}`));
+  } catch (err) {
+    return toast(`themes/${name}.yaml: ${(err as Error).message}`, true);
+  }
+  themeDeck = current ? deckOf(current) : themeDeck ?? (decks.find((d) => d.name === 'exemplo') ?? decks[0])?.name ?? null;
+  if (current) closeFile();
+  editingTheme = name;
+  themeData = data;
+
+  $('editor').hidden = true;
+  $('empty').hidden = true;
+  panel.hidden = false;
+  $('crumb').innerHTML = `<span>themes/</span>${esc(name)}.yaml`;
+  setStatus('saved');
+  history.replaceState(null, '', `#tema:${name}`);
+  renderThemePanel();
+  renderThemes();
+
+  $('draft-note').hidden = true;
+  $('slide-count').textContent = themeDeck ? `prévia: ${themeDeck}` : '—';
+  if (!themeDeck) return;
+  if (previewDeck !== themeDeck || !previewReady) {
+    previewDeck = themeDeck;
+    previewReady = false;
+    retries = 0;
+    iframe.src = `/${themeDeck}/?embed#1`;
+  } else postTheme();
+}
+
+/** Sai do modo tema. `reset`: volta para a tela vazia. */
+function closeTheme(reset = false) {
+  clearTimeout(themeTimer);
+  if (themeTimer !== undefined && editingTheme && themeData) saveTheme(editingTheme, themeData);
+  editingTheme = null;
+  themeData = null;
+  panel.hidden = true;
+  $('editor').hidden = false;
+  previewReady = false; // recarrega o preview sem o tema provisório
+  renderThemes();
+  if (reset) {
+    closeFile();
+    iframe.removeAttribute('src');
+  }
+}
+
+function postTheme() {
+  if (!editingTheme || !themeData) return;
+  iframe.contentWindow?.postMessage(
+    { type: 'editor:theme', name: editingTheme, css: themeCss(editingTheme, themeData), background: themeData.background, mode: themeData.mode },
+    '*',
+  );
+}
+
+async function saveTheme(name: string, data: ThemeFile) {
+  themeTimer = undefined;
+  setStatus('saving');
+  try {
+    await api(`theme?name=${encodeURIComponent(name)}`, { method: 'PUT', json: data });
+    if (name === editingTheme) setStatus('saved');
+  } catch (err) {
+    setStatus('error');
+    toast((err as Error).message, true);
+  }
+}
+
+function themeChanged() {
+  if (!editingTheme || !themeData) return;
+  postTheme();
+  setStatus('dirty');
+  clearTimeout(themeTimer);
+  const [name, data] = [editingTheme, structuredClone(themeData)];
+  themeTimer = window.setTimeout(() => saveTheme(name, data), 600);
+}
+
+const radios = (key: string, options: readonly string[], labels: Record<string, string>, current: string) =>
+  `<div class="seg" role="radiogroup">${options
+    .map((o) => `<label class="seg-opt seg-${key}-${o}"><input type="radio" name="${key}" value="${o}"${o === current ? ' checked' : ''} /><span>${labels[o] ?? o}</span></label>`)
+    .join('')}</div>`;
+
+function renderThemePanel() {
+  const t = themeData!;
+  panel.innerHTML = `
+    <header class="tp-head">
+      <div>
+        <h2>${esc(editingTheme!)}</h2>
+        <p>Use com <code>theme: ${esc(editingTheme!)}</code> no primeiro slide. Fica em <code>themes/${esc(editingTheme!)}.yaml</code>.</p>
+      </div>
+      ${themeDeck ? `<button type="button" class="btn primary" id="apply-theme">Usar em ${esc(themeDeck)}</button>` : ''}
+    </header>
+
+    <section>
+      <h3>Cores</h3>
+      <div class="colors">
+        ${COLOR_FIELDS.map(([k, label, hint]) => `
+          <label class="color">
+            <input type="color" data-color="${k}" value="${t.colors[k]}" />
+            <span><b>${label}</b>${hint ? `<small>${hint}</small>` : ''}</span>
+            <input type="text" class="hex" data-hex="${k}" value="${t.colors[k]}" maxlength="7" spellcheck="false" />
+          </label>`).join('')}
+      </div>
+    </section>
+
+    <section>
+      <h3>Modo</h3>
+      ${radios('mode', ['dark', 'light'], { dark: 'Escuro', light: 'Claro' }, t.mode)}
+    </section>
+
+    <section>
+      <h3>Fonte dos títulos</h3>
+      ${radios('font', fonts, FONT_LABELS, t.font)}
+    </section>
+
+    <section>
+      <h3>Fundo</h3>
+      ${radios('background', backgrounds, BG_LABELS, t.background)}
+    </section>
+
+    <section class="ranges">
+      <label><span>Cantos <output id="corners-out">${t.corners}px</output></span>
+        <input type="range" name="corners" min="0" max="60" step="1" value="${t.corners}" /></label>
+      <label><span>Granulado <output id="grain-out">${t.grain}</output></span>
+        <input type="range" name="grain" min="0" max="0.3" step="0.01" value="${t.grain}" /></label>
+    </section>
+  `;
+}
+
+panel.addEventListener('input', (e) => {
+  const el = e.target as HTMLInputElement;
+  const t = themeData;
+  if (!t) return;
+  if (el.dataset.color) {
+    const k = el.dataset.color as keyof ThemeFile['colors'];
+    t.colors[k] = el.value;
+    panel.querySelector<HTMLInputElement>(`[data-hex="${k}"]`)!.value = el.value;
+  } else if (el.dataset.hex) {
+    const v = el.value.trim();
+    if (!/^#[0-9a-fA-F]{6}$/.test(v)) return;
+    const k = el.dataset.hex as keyof ThemeFile['colors'];
+    t.colors[k] = v.toLowerCase();
+    panel.querySelector<HTMLInputElement>(`[data-color="${k}"]`)!.value = v.toLowerCase();
+  } else if (el.name === 'corners') {
+    t.corners = Number(el.value);
+    $('corners-out').textContent = `${el.value}px`;
+  } else if (el.name === 'grain') {
+    t.grain = Number(el.value);
+    $('grain-out').textContent = el.value;
+  } else if (el.name === 'mode' || el.name === 'font' || el.name === 'background') {
+    (t as any)[el.name] = el.value;
+  } else return;
+  themeChanged();
+});
+panel.addEventListener('submit', (e) => e.preventDefault());
+
+// "Usar em <apresentação>": grava theme: <nome> no primeiro slide.
+panel.addEventListener('click', async (e) => {
+  if (!(e.target as HTMLElement).closest('#apply-theme') || !themeDeck || !editingTheme) return;
+  const first = visible(themeDeck)[0];
+  if (!first) return;
+  const path = `${themeDeck}/${first}`;
+  try {
+    let { text } = await api<{ text: string }>(`file?${q(path)}`);
+    const line = `theme: ${editingTheme}`;
+    if (/^---\r?\n/.test(text)) {
+      const end = text.indexOf('\n---', 3);
+      const head = text.slice(0, end);
+      text = /^theme:.*$/m.test(head)
+        ? head.replace(/^theme:.*$/m, line) + text.slice(end)
+        : text.replace(/^---\r?\n/, `---\n${line}\n`);
+    } else text = `---\n${line}\n---\n\n${text}`;
+    await api(`file?${q(path)}`, { method: 'PUT', body: text });
+    toast(`${themeDeck} agora usa o tema ${editingTheme}`);
+  } catch (err) {
+    toast((err as Error).message, true);
+  }
+});
+
+async function onThemeFileChange(name: string) {
+  await refreshThemes();
+  if (name !== editingTheme) return;
+  if (!themes.some((t) => t.name === name)) {
+    toast(`themes/${name}.yaml foi removido.`, true);
+    return closeTheme(true);
+  }
+  if (themeTimer !== undefined) return; // há alterações nossas para salvar
+  try {
+    const { theme } = await api<{ theme: ThemeFile }>(`theme?name=${encodeURIComponent(name)}`);
+    if (JSON.stringify(theme) === JSON.stringify(themeData)) return; // eco do nosso salvamento
+    themeData = theme;
+    renderThemePanel();
+    postTheme();
+    toast('Tema recarregado do disco');
+  } catch (err) {
+    toast(`themes/${name}.yaml: ${(err as Error).message}`, true);
+  }
+}
+
+// ───────────────────────── mudanças no disco ─────────────────────────
+
+let treeTimer: number | undefined;
+const events = new EventSource('/__editor/api/events');
+events.onmessage = async (e) => {
+  const { kind, path } = JSON.parse(e.data) as { kind: string; path: string };
+  if (kind === 'themes') return onThemeFileChange(path);
+  if (kind !== 'change') {
+    clearTimeout(treeTimer);
+    treeTimer = window.setTimeout(async () => {
+      await refreshTree();
+      if (current && !decks.some((d) => d.name === deckOf(current!) && d.files.includes(fileOf(current!)))) {
+        toast(`${current} foi removido do disco.`, true);
+        closeFile();
+      } else if (current) showPreview();
+    }, 150);
+    return;
+  }
+  if (path !== current) return;
+  await saving;
+  const { text } = await api<{ text: string }>(`file?${q(path)}`);
+  if (text === saved) return; // eco do nosso próprio salvamento
+  if (view.state.doc.toString() !== saved) {
+    const r = await ask('Arquivo alterado fora do editor', {
+      text: `slides/${path} mudou no disco e você tem alterações não salvas aqui. Carregar a versão do disco?`,
+      ok: 'Carregar do disco',
+    });
+    if (!r) return;
+  }
+  await openFile(path, true);
+  toast('Recarregado do disco');
+};
+
+window.addEventListener('beforeunload', (e) => {
+  if (themeTimer !== undefined && editingTheme && themeData) {
+    saveTheme(editingTheme, themeData);
+    e.preventDefault();
+  }
+  if (current && view.state.doc.toString() !== saved) {
+    flush();
+    e.preventDefault();
+  }
+});
+
+// ───────────────────────── início ─────────────────────────
+
+(async () => {
+  await Promise.all([refreshTree(), refreshThemes()]);
+  const hash = decodeURIComponent(location.hash.slice(1));
+  if (hash.startsWith('tema:') && themes.some((t) => t.name === hash.slice(5) && !t.builtin)) return openTheme(hash.slice(5));
+  const all = decks.flatMap((d) => d.files.map((f) => `${d.name}/${f}`));
+  const wanted = [hash, store.get('editor:last') ?? ''].find((p) => all.includes(p));
+  if (wanted) await openFile(wanted);
+  else if (decks[0]) {
+    open.add(decks[0].name);
+    renderTree();
+  }
+})().catch((err) => toast(err.message, true));

@@ -4,12 +4,15 @@ import '@fontsource-variable/fraunces';
 import '@fontsource-variable/jetbrains-mono';
 import '../styles/themes.css';
 import '../styles/slide.css';
+import { getThemes } from '../lib/decks';
 
 interface Props {
   title: string;
   theme?: string;
 }
 const { title, theme = 'aurora' } = Astro.props;
+// CSS dos temas criados em themes/*.yaml
+const { css: themeCss } = await getThemes();
 ---
 
 <!doctype html>
@@ -19,6 +22,7 @@ const { title, theme = 'aurora' } = Astro.props;
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <link rel="icon" href={`data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%238b5cf6'/><rect x='7' y='10' width='18' height='12' rx='2' fill='white'/></svg>`} />
+    {themeCss && <style is:inline set:html={themeCss} />}
   </head>
   <body data-theme={theme}>
     <slot />

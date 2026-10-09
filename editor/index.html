@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Editor de slides</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%238b5cf6'/><path d='M9 22l2-6 9-9 4 4-9 9z' fill='white'/></svg>" />
+    <link rel="stylesheet" href="/node_modules/@fontsource-variable/inter/index.css" />
+    <link rel="stylesheet" href="/node_modules/@fontsource-variable/jetbrains-mono/index.css" />
+    <link rel="stylesheet" href="/node_modules/@fontsource-variable/fraunces/index.css" />
+    <link rel="stylesheet" href="/editor/editor.css" />
+  </head>
+  <body>
+    <header class="top">
+      <a class="brand" href="/" title="Página inicial das apresentações">
+        <svg viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#8b5cf6" /><path d="M9 22l2-6 9-9 4 4-9 9z" fill="#fff" /></svg>
+        <span>Slides</span>
+      </a>
+      <div class="crumb" id="crumb">Nenhum arquivo aberto</div>
+      <span class="status" id="status" data-state="idle"></span>
+
+      <div class="tools" id="tools" hidden>
+        <label class="select" title="Layout do slide">
+          <span>Layout</span>
+          <select id="layout"></select>
+        </label>
+        <div class="menu">
+          <button id="insert-btn" class="btn" aria-haspopup="true">Inserir <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></svg></button>
+          <div class="menu-list" id="insert-menu" hidden></div>
+        </div>
+        <button class="btn" id="image-btn" title="Enviar imagem para public/img (ou arraste/cole no editor)">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-5-5L5 21" /></svg>
+          Imagem
+        </button>
+        <input type="file" id="image-input" accept="image/*" hidden />
+      </div>
+
+      <div class="menu" id="export" hidden>
+        <button id="export-btn" class="btn" aria-haspopup="true">
+          <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14" /></svg>
+          Exportar
+        </button>
+        <div class="menu-list" id="export-menu" hidden>
+          <button data-export="pdf"><b>PDF da apresentação</b><small>Idêntico à tela, um slide por página</small></button>
+          <button data-export="png"><b>PNG do slide atual</b><small>Imagem 1920×1080</small></button>
+          <button data-export="print"><b>Imprimir pelo navegador</b><small>PDF com texto selecionável (Salvar como PDF)</small></button>
+        </div>
+      </div>
+
+      <a class="btn primary" id="present" target="_blank" hidden>
+        <svg viewBox="0 0 24 24"><path d="M6 4l14 8-14 8z" /></svg>
+        Apresentar
+      </a>
+    </header>
+
+    <div class="main" id="main">
+      <aside class="side">
+        <div class="side-head">
+          <span>Apresentações</span>
+          <button class="icon" id="new-deck" title="Nova apresentação">
+            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
+          </button>
+        </div>
+        <nav class="tree" id="tree"></nav>
+        <div class="side-head themes-head">
+          <span>Temas</span>
+          <button class="icon" id="new-theme" title="Novo tema">
+            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
+          </button>
+        </div>
+        <nav class="theme-list" id="theme-list"></nav>
+        <p class="side-tip">Arquivos com <code>_</code> no início são rascunhos e não aparecem na apresentação.</p>
+      </aside>
+
+      <section class="pane editor-pane">
+        <div id="editor"></div>
+        <form class="theme-panel" id="theme-panel" hidden autocomplete="off"></form>
+        <div class="empty" id="empty">
+          <p>Escolha um slide à esquerda<br />ou crie uma apresentação ou um tema novo.</p>
+        </div>
+      </section>
+
+      <div class="gutter" id="gutter" title="Arraste para redimensionar"></div>
+
+      <section class="pane preview-pane">
+        <div class="frame" id="frame">
+          <iframe id="preview" title="Pré-visualização"></iframe>
+          <div class="draft-note" id="draft-note" hidden>Rascunho — este arquivo não aparece na apresentação.</div>
+        </div>
+        <button class="problems" id="problems" hidden title="Ir para a linha"></button>
+        <div class="preview-bar">
+          <button class="icon" id="prev" title="Slide anterior (Ctrl+PageUp)">
+            <svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" /></svg>
+          </button>
+          <span id="slide-count">—</span>
+          <button class="icon" id="next" title="Próximo slide (Ctrl+PageDown)">
+            <svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></svg>
+          </button>
+          <span class="hint">Salva sozinho · <kbd>Ctrl</kbd> <kbd>S</kbd> salva na hora</span>
+        </div>
+      </section>
+    </div>
+
+    <dialog id="dialog">
+      <form method="dialog">
+        <h2 id="dialog-title"></h2>
+        <p id="dialog-text"></p>
+        <input id="dialog-input" autocomplete="off" spellcheck="false" />
+        <select id="dialog-select" hidden></select>
+        <menu>
+          <button value="cancel" class="btn">Cancelar</button>
+          <button value="ok" class="btn primary" id="dialog-ok">OK</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" hidden></div>
+
+    <script type="module" src="/editor/main.ts"></script>
+  </body>
+</html>

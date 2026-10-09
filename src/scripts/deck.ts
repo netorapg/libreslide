@@ -12,6 +12,14 @@ let step = 0;
 let overview = false;
 let notesOpen = false;
 
+// Modo "embed": preview dentro do editor (editor/). Mostra o slide inteiro,
+// sem etapas nem controles, e conversa com o editor via postMessage.
+const params = new URLSearchParams(location.search);
+const embed = params.has('embed') || params.has('export');
+if (embed) document.body.classList.add('embed');
+// ?export: captura de tela pelo editor (sem transições nem animações).
+if (params.has('export')) document.body.classList.add('export');
+
 // Prepara colunas (layout: columns) e etapas (steps: true).
 for (const slot of slots) {
   const slide = slot.querySelector<HTMLElement>('.slide')!;
@@ -72,12 +80,13 @@ function update() {
   notes.textContent = slide.dataset.notes ?? 'Sem notas neste slide.';
   notes.hidden = !notesOpen;
   history.replaceState(null, '', `#${cur + 1}`);
+  if (embed) parent.postMessage({ type: 'deck:slide', index: cur }, '*');
 }
 
 function go(i: number, atEnd = false) {
   if (i < 0 || i >= slots.length) return;
   cur = i;
-  step = atEnd ? slots[i].frags.length : 0;
+  step = atEnd || embed ? slots[i].frags.length : 0;
   update();
 }
 
@@ -177,9 +186,27 @@ window.addEventListener('hashchange', () => {
   const n = parseInt(location.hash.slice(1), 10) - 1;
   if (n !== cur) go(n);
 });
+window.addEventListener('message', (e) => {
+  if (!embed) return;
+  if (e.data?.type === 'editor:go') go(e.data.index, true);
+  // Pré-visualização de um tema sendo editado: aplica em todos os slides.
+  if (e.data?.type === 'editor:theme') {
+    const { name, css, background, mode } = e.data;
+    let style = document.getElementById('live-theme');
+    if (!style) document.head.append((style = Object.assign(document.createElement('style'), { id: 'live-theme' })));
+    style.textContent = css;
+    for (const el of [document.body, ...stage.querySelectorAll<HTMLElement>('.slide')]) {
+      Object.assign(el.dataset, { theme: name, bg: background, mode });
+    }
+  }
+});
 window.addEventListener('beforeprint', () => slots.forEach((s) => (s.inert = false)));
 
 const start = parseInt(location.hash.slice(1), 10) - 1;
 cur = Number.isInteger(start) && start >= 0 && start < slots.length ? start : 0;
+if (embed) step = slots[cur].frags.length;
 fit();
 update();
+
+// ?print: abre a janela de impressão (Salvar como PDF) assim que as fontes carregarem.
+if (params.has('print')) document.fonts.ready.then(() => setTimeout(() => window.print(), 300));

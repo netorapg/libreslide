@@ -1,0 +1,17 @@
+# Tema de exemplo. Use com `theme: oceano` no primeiro slide (ou num slide só).
+# Para criar o seu: copie este arquivo com outro nome, ou use o editor (npm run editor → Temas).
+
+mode: dark          # dark | light — claro ou escuro (muda os cartões e os blocos de código)
+background: aurora  # aurora | paper | noir | sunset | plain — estilo do fundo
+font: sans          # sans | serif | mono — fonte dos títulos
+
+colors:
+  background: "#04131f"  # fundo
+  text: "#e8f6ff"        # texto
+  muted: "#8eb1c7"       # texto secundário
+  accent: "#38bdf8"      # destaque principal (e as luzes do fundo)
+  accent2: "#2dd4bf"     # segunda cor do gradiente dos títulos
+  accent3: "#818cf8"     # terceira cor
+
+corners: 20         # arredondamento dos cantos, de 0 a 60
+grain: 0.06         # granulado do fundo, de 0 a 0.3

@@ -5,6 +5,8 @@ import { getDecks } from '../lib/decks';
 
 const decks = await getDecks();
 const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+// O editor (editor/plugin.mjs) só existe no servidor de desenvolvimento.
+const dev = import.meta.env.DEV;
 ---
 
 <Base title="Apresentações" theme="aurora">
@@ -15,6 +17,12 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
       <p class="lead">
         Cada pasta em <code>slides/</code> vira uma apresentação, e cada arquivo <code>.md</code> dentro dela, um slide.
       </p>
+      {dev && (
+        <a class="edit" href="/__editor/">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="m13.5 6.5 4 4" /></svg>
+          Abrir editor
+        </a>
+      )}
     </header>
 
     <ul class="grid">
@@ -87,6 +95,24 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
     font-size: 18px;
     line-height: 1.6;
   }
+  .edit {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 32px;
+    padding: 12px 20px;
+    border-radius: 12px;
+    background: linear-gradient(100deg, var(--accent), var(--accent-2));
+    color: #fff;
+    font-weight: 600;
+    font-size: 15px;
+    text-decoration: none;
+    box-shadow: 0 16px 40px -16px var(--accent);
+    transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.25s;
+  }
+  .edit svg { width: 18px; height: 18px; }
+  .edit:hover,
+  .edit:focus-visible { transform: translateY(-2px); box-shadow: 0 22px 50px -16px var(--accent); }
   code {
     padding: 2px 6px;
     border: 1px solid var(--border);

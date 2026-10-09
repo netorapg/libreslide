@@ -26,6 +26,16 @@
 .slot.is-past > .slide { transform: translateX(-120px) scale(0.97); }
 .slot.is-future > .slide { transform: translateX(120px) scale(0.97); }
 
+/* Preview dentro do editor */
+.embed .hud,
+.embed .panel,
+.embed astro-dev-toolbar { display: none !important; }
+
+.export *, .export *::before, .export *::after {
+  transition: none !important;
+  animation-play-state: paused !important;
+}
+
 /* ───────────── Visão geral (tecla O) ───────────── */
 .stage.overview {
   overflow-y: auto;
@@ -197,6 +207,6 @@ kbd {
   .slot > .slide { opacity: 1 !important; filter: none !important; transform: none !important; }
   .frag { opacity: 1 !important; transform: none !important; filter: none !important; }
   .slide .bg::before { animation: none !important; }
-  .hud, .panel { display: none !important; }
+  .hud, .panel, astro-dev-toolbar { display: none !important; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 const [name, theme = 'aurora'] = process.argv.slice(2);
 if (!name) {
-  console.error('Uso: npm run nova -- nome-da-apresentacao [aurora|paper|noir|sunset]');
+  console.error('Uso: npm run nova -- nome-da-apresentacao [tema]  (aurora, paper, noir, sunset ou um de themes/)');
   process.exit(1);
 }
 
