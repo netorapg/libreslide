@@ -188,3 +188,7 @@ O endereço guarda o slide atual (`/minha-palestra/#5`). No celular, deslize par
 Para a maioria dos casos, um tema em `themes/` basta (veja **Temas**). Os quatro temas prontos
 são variáveis CSS em `src/styles/themes.css`; para criar outro do mesmo jeito, copie um bloco,
 renomeie e adicione o nome em `builtinThemes`, `builtinInfo` e `builtinPresets` (`src/lib/themes.ts`).
+
+## Licença
+
+[MIT](LICENSE) © 2026 netorapg. Use, modifique e distribua à vontade, mantendo o aviso de copyright.
