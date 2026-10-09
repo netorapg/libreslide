@@ -1,18 +1,43 @@
 {
   "name": "libreslide",
-  "version": "1.0.0",
-  "private": true,
-  "type": "module",
-  "description": "Slides bonitos escritos em Markdown, com editor no navegador.",
+  "version": "0.1.0",
+  "description": "Slides livres em Markdown, com editor no navegador, temas e templates de instituição.",
+  "keywords": [
+    "slides",
+    "presentation",
+    "apresentacao",
+    "markdown",
+    "editor",
+    "astro",
+    "cli",
+    "templates"
+  ],
   "license": "MIT",
+  "author": "netorapg",
+  "homepage": "https://github.com/netorapg/libreslide",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/netorapg/libreslide.git"
   },
-  "homepage": "https://github.com/netorapg/libreslide",
+  "bugs": {
+    "url": "https://github.com/netorapg/libreslide/issues"
+  },
+  "type": "module",
   "bin": {
     "libreslide": "bin/libreslide.mjs"
   },
+  "files": [
+    "bin/",
+    "editor/",
+    "src/",
+    "workspace.mjs",
+    "astro.config.mjs",
+    "tsconfig.json",
+    "slides/exemplo/",
+    "templates/instituicao-exemplo/",
+    "themes/oceano.yaml",
+    "public/img/abstrato.svg"
+  ],
   "engines": {
     "node": ">=22.12.0"
   },

@@ -1,0 +1,34 @@
+# Publica no npm quando uma tag de versão (v0.1.0, v0.2.0…) é enviada ao GitHub.
+#   npm version patch|minor|major && git push --follow-tags
+#
+# Usa "trusted publishing" (OIDC): nenhum token guardado no repositório, e o npm
+# registra a proveniência (de qual commit e de qual execução saiu cada versão).
+# Configure em npmjs.com → pacote libreslide → Settings → Trusted publishing:
+# GitHub Actions, repositório netorapg/libreslide, workflow publicar.yml.
+name: Publicar no npm
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  id-token: write # necessário para o trusted publishing e a proveniência
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing precisa do npm 11.5.1 ou mais novo.
+      - run: npm install -g npm@^11.5.1
+      - run: npm ci
+      - name: A tag bate com a versão do package.json?
+        run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
+      - name: O site compila?
+        run: npm run build
+      - run: npm publish --access public

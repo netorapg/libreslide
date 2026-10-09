@@ -4,27 +4,29 @@ Slides livres em Markdown, com editor no navegador. Software livre, gratuito e f
 
 > Projeto independente, sem ligação com o LibreOffice ou a The Document Foundation.
 
-## Começar (sem clonar nada)
+## Começar
 
 Com o [Node.js](https://nodejs.org) 22.12 ou mais novo instalado, rode no terminal:
 
 ```bash
-npx github:netorapg/libreslide
+npx libreslide
 ```
 
 O comando pergunta onde guardar suas apresentações (Enter aceita `~/Apresentacoes`), cria a pasta com uma apresentação de exemplo e abre o editor no navegador. Da próxima vez, ele sugere a mesma pasta.
 
 ```bash
-npx github:netorapg/libreslide ~/minhas-palestras         # pula a pergunta
-npx github:netorapg/libreslide ~/minhas-palestras --port 5000
-npx github:netorapg/libreslide build ~/minhas-palestras   # site estático em ~/minhas-palestras/dist
+npx libreslide ~/minhas-palestras               # pula a pergunta
+npx libreslide ~/minhas-palestras --port 5000
+npx libreslide build ~/minhas-palestras         # site estático em ~/minhas-palestras/dist
+npm install -g libreslide                       # instala de vez; depois é só `libreslide`
 ```
 
-A pasta contém só o seu conteúdo (`slides/`, `themes/`, `templates/`, `public/img/`); o programa fica no cache do npm, separado dela. O clique no caminho, no canto da barra lateral do editor, abre a pasta no gerenciador de arquivos.
+A pasta contém só o seu conteúdo (`slides/`, `themes/`, `templates/`, `public/img/`); o programa fica separado dela. O clique no caminho, no canto da barra lateral do editor, abre a pasta no gerenciador de arquivos. A primeira execução demora um pouco (instala o Astro e o editor); as seguintes usam o cache.
 
 ## Desenvolvendo (clonando o repositório)
 
 ```bash
+git clone https://github.com/netorapg/libreslide && cd libreslide
 npm install
 npm run dev            # abre http://localhost:4321
 npm run editor         # editor no navegador: http://localhost:4321/__editor/
