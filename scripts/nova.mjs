@@ -1,6 +1,7 @@
 // Cria uma nova apresentação: npm run nova -- nome-da-apresentacao [tema ou template]
 import { mkdirSync, writeFileSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { ws } from '../workspace.mjs';
 
 const [name, theme = 'aurora'] = process.argv.slice(2);
 if (!name) {
@@ -9,7 +10,7 @@ if (!name) {
 }
 
 const slug = name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-const dir = join('slides', slug);
+const dir = ws('slides', slug);
 if (existsSync(dir)) {
   console.error(`A pasta ${dir} já existe.`);
   process.exit(1);
@@ -49,7 +50,7 @@ subtitle: Perguntas?
 };
 
 // Template (templates/<nome>/): copia os slides iniciais dele, se houver.
-const tplDir = join('templates', theme);
+const tplDir = ws('templates', theme);
 if (existsSync(join(tplDir, 'template.yaml')) || existsSync(join(tplDir, 'template.yml'))) {
   const starters = readdirSync(tplDir).filter((f) => f.endsWith('.md') && !f.startsWith('_')).sort();
   for (const k of Object.keys(files)) delete files[k];

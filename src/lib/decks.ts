@@ -1,5 +1,7 @@
 import { getCollection, type CollectionEntry } from 'astro:content';
+import { existsSync } from 'node:fs';
 import { builtinInfo, themeCss, type ThemeInfo } from './themes';
+import { TEMPLATE_FILES, ws } from '../../workspace.mjs';
 
 export type SlideEntry = CollectionEntry<'slides'>;
 
@@ -18,13 +20,6 @@ export interface Deck {
   slides: SlideEntry[];
 }
 
-// Logos e outras imagens dentro de templates/<nome>/ (o Vite copia para o build).
-const templateFiles = import.meta.glob<string>('/templates/*/*.{svg,png,jpg,jpeg,webp,gif,avif}', {
-  eager: true,
-  query: '?url',
-  import: 'default',
-});
-
 /** Todos os templates de templates/<nome>/template.yaml. */
 export async function getTemplates(): Promise<Record<string, Template>> {
   const out: Record<string, Template> = {};
@@ -33,8 +28,9 @@ export async function getTemplates(): Promise<Record<string, Template>> {
     let logoUrl: string | undefined;
     if (logo?.startsWith('/')) logoUrl = asset(logo);
     else if (logo) {
-      logoUrl = templateFiles[`/templates/${t.id}/${logo}`];
-      if (!logoUrl) console.warn(`[templates] templates/${t.id}/${logo} não existe.`);
+      // Servido pela integração de workspace.mjs (dev e build).
+      if (existsSync(ws('templates', t.id, logo))) logoUrl = asset(`/${TEMPLATE_FILES}/${t.id}/${encodeURIComponent(logo)}`);
+      else console.warn(`[templates] templates/${t.id}/${logo} não existe.`);
     }
     out[t.id] = { ...t.data, id: t.id, logoUrl };
   }

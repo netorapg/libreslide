@@ -9,6 +9,14 @@ import { oneDark } from '@codemirror/theme-one-dark';
 import type { CompletionContext, CompletionResult } from '@codemirror/autocomplete';
 import { backgrounds, fonts, themeCss, type ThemeFile } from '../src/lib/themes';
 import { linter, type Diagnostic } from '@codemirror/lint';
+// Fontes via Vite (?url), que acha os pacotes onde quer que o npm os tenha instalado.
+import interCss from '@fontsource-variable/inter/index.css?url';
+import monoCss from '@fontsource-variable/jetbrains-mono/index.css?url';
+import frauncesCss from '@fontsource-variable/fraunces/index.css?url';
+
+for (const href of [interCss, monoCss, frauncesCss]) {
+  document.head.prepend(Object.assign(document.createElement('link'), { rel: 'stylesheet', href }));
+}
 
 // Espelha src/content.config.ts
 const LAYOUTS = ['default', 'cover', 'section', 'center', 'statement', 'quote', 'split', 'image', 'columns'];
@@ -1009,6 +1017,7 @@ async function newTemplate(base?: string) {
 }
 
 $('new-template').addEventListener('click', () => newTemplate());
+$('workspace').addEventListener('click', () => api('reveal', { method: 'POST' }).catch((err) => toast(err.message, true)));
 
 $('template-list').addEventListener('click', async (e) => {
   const el = e.target as HTMLElement;
@@ -1371,6 +1380,11 @@ window.addEventListener('beforeunload', (e) => {
 
 (async () => {
   await Promise.all([refreshTree(), refreshThemes(), refreshTemplates()]);
+  api<{ workspace: string; shown: string }>('info').then(({ workspace, shown }) => {
+    $('workspace-path').textContent = shown;
+    $('workspace').title = `${workspace}\nAbrir a pasta no gerenciador de arquivos`;
+    $('workspace').hidden = false;
+  });
   const hash = decodeURIComponent(location.hash.slice(1));
   if (hash.startsWith('tema:') && themes.some((t) => t.name === hash.slice(5) && !t.builtin)) return openTheme(hash.slice(5));
   if (hash.startsWith('template:') && TEMPLATE_NAMES.includes(hash.slice(9))) return openTemplate(hash.slice(9));

@@ -4,14 +4,17 @@ import { readFile, writeFile, readdir, mkdir, rm, rename, stat, cp, copyFile } f
 import { existsSync } from 'node:fs';
 import { join, resolve, relative, sep, extname, basename } from 'node:path';
 import yaml from 'js-yaml';
+import { spawn } from 'node:child_process';
+import { homedir } from 'node:os';
 import { capture, findBrowser, imagesToPdf } from './export.mjs';
+import { APP, WORKSPACE, TEMPLATE_FILES } from '../workspace.mjs';
 
-const ROOT = process.cwd();
-const SLIDES = resolve(ROOT, 'slides');
-const IMG = resolve(ROOT, 'public/img');
-const THEMES = resolve(ROOT, 'themes');
-const TEMPLATES = resolve(ROOT, 'templates');
-const HTML = resolve(ROOT, 'editor/index.html');
+// Conteúdo na área de trabalho (o projeto ou a pasta do comando `libreslide`).
+const SLIDES = resolve(WORKSPACE, 'slides');
+const IMG = resolve(WORKSPACE, 'public/img');
+const THEMES = resolve(WORKSPACE, 'themes');
+const TEMPLATES = resolve(WORKSPACE, 'templates');
+const HTML = resolve(APP, 'editor/index.html');
 const API = '/__editor/api/';
 
 const byName = (a, b) => a.localeCompare(b, undefined, { numeric: true });
@@ -331,7 +334,7 @@ const routes = {
     const name = query.get('name');
     const template = await readTemplate(server, name);
     const logoUrl = template.logo
-      ? template.logo.startsWith('/') ? template.logo : `/templates/${name}/${template.logo}`
+      ? template.logo.startsWith('/') ? template.logo : `/${TEMPLATE_FILES}/${name}/${encodeURIComponent(template.logo)}`
       : null;
     return { template, slides: await templateSlides(name), logoUrl };
   },
@@ -442,6 +445,22 @@ const routes = {
 
 
   'GET tree': async () => tree(),
+
+  // Pasta onde estão as apresentações (mostrada na barra lateral).
+  'GET info': async () => {
+    const home = homedir();
+    const shown = WORKSPACE === home || WORKSPACE.startsWith(home + sep) ? '~' + WORKSPACE.slice(home.length) : WORKSPACE;
+    return { workspace: WORKSPACE, shown };
+  },
+
+  // Abre a pasta no gerenciador de arquivos do sistema.
+  'POST reveal': async () => {
+    const [cmd, ...args] = process.platform === 'darwin' ? ['open', WORKSPACE]
+      : process.platform === 'win32' ? ['explorer', WORKSPACE]
+      : ['xdg-open', WORKSPACE];
+    spawn(cmd, args, { detached: true, stdio: 'ignore' }).on('error', () => {}).unref();
+    return { ok: true };
+  },
 
   'POST validate': async ({ req, query, server }) => ({
     diagnostics: await validate(server, (await body(req)).toString(), query.get('path')),

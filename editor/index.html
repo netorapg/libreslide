@@ -3,18 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Editor de slides</title>
+    <title>LibreSlide</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%238b5cf6'/><path d='M9 22l2-6 9-9 4 4-9 9z' fill='white'/></svg>" />
-    <link rel="stylesheet" href="/node_modules/@fontsource-variable/inter/index.css" />
-    <link rel="stylesheet" href="/node_modules/@fontsource-variable/jetbrains-mono/index.css" />
-    <link rel="stylesheet" href="/node_modules/@fontsource-variable/fraunces/index.css" />
     <link rel="stylesheet" href="/editor/editor.css" />
   </head>
   <body>
     <header class="top">
       <a class="brand" href="/" title="Página inicial das apresentações">
         <svg viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#8b5cf6" /><path d="M9 22l2-6 9-9 4 4-9 9z" fill="#fff" /></svg>
-        <span>Slides</span>
+        <span>LibreSlide</span>
       </a>
       <div class="crumb" id="crumb">Nenhum arquivo aberto</div>
       <span class="status" id="status" data-state="idle"></span>
@@ -77,6 +74,10 @@
         </div>
         <nav class="theme-list" id="template-list"></nav>
         <p class="side-tip">Arquivos com <code>_</code> no início são rascunhos e não aparecem na apresentação.</p>
+        <button class="workspace" id="workspace" title="Abrir a pasta no gerenciador de arquivos" hidden>
+          <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
+          <span id="workspace-path"></span>
+        </button>
       </aside>
 
       <section class="pane editor-pane">

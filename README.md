@@ -1,6 +1,28 @@
-# Apresentações em Markdown (Astro)
+# LibreSlide
 
-Slides bonitos escritos em `.md`: **cada pasta em `slides/` é uma apresentação e cada arquivo `.md` dentro dela é um slide.**
+Slides livres em Markdown, com editor no navegador. Software livre, gratuito e feito com [Astro](https://astro.build): **cada pasta em `slides/` é uma apresentação e cada arquivo `.md` dentro dela é um slide.**
+
+> Projeto independente, sem ligação com o LibreOffice ou a The Document Foundation.
+
+## Começar (sem clonar nada)
+
+Com o [Node.js](https://nodejs.org) 22.12 ou mais novo instalado, rode no terminal:
+
+```bash
+npx github:netorapg/libreslide
+```
+
+O comando pergunta onde guardar suas apresentações (Enter aceita `~/Apresentacoes`), cria a pasta com uma apresentação de exemplo e abre o editor no navegador. Da próxima vez, ele sugere a mesma pasta.
+
+```bash
+npx github:netorapg/libreslide ~/minhas-palestras         # pula a pergunta
+npx github:netorapg/libreslide ~/minhas-palestras --port 5000
+npx github:netorapg/libreslide build ~/minhas-palestras   # site estático em ~/minhas-palestras/dist
+```
+
+A pasta contém só o seu conteúdo (`slides/`, `themes/`, `templates/`, `public/img/`); o programa fica no cache do npm, separado dela. O clique no caminho, no canto da barra lateral do editor, abre a pasta no gerenciador de arquivos.
+
+## Desenvolvendo (clonando o repositório)
 
 ```bash
 npm install
