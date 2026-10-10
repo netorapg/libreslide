@@ -510,6 +510,14 @@ const routes = {
     return { path: `${name}/${starters[0]}` };
   },
 
+  // Apaga a apresentação inteira (a pasta slides/<nome>/).
+  'DELETE deck': async ({ query }) => {
+    const dir = deckPath(query.get('name'));
+    if (!existsSync(dir)) throw new HttpError(404, 'Apresentação não existe mais.');
+    await rm(dir, { recursive: true });
+    return { ok: true };
+  },
+
   'POST rename': async ({ json }) => {
     const from = slidePath(json.from);
     const to = slidePath(json.to);

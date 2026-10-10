@@ -175,6 +175,7 @@ function renderTree() {
           <span class="label">${esc(d.name)}</span>
           <span class="n">${d.files.length}</span>
           <button class="icon" data-act="new-slide" title="Novo slide">${ICONS.plus}</button>
+          <button class="icon" data-act="delete-deck" title="Excluir apresentação">${ICONS.trash}</button>
         </div>
         <ul>${files}</ul>
       </div>`;
@@ -208,6 +209,22 @@ $('tree').addEventListener('click', async (e) => {
       if (!r) return;
       await api(`file?${q(file)}`, { method: 'DELETE' });
       if (file === current) closeFile();
+      await refreshTree();
+    } else if (act === 'delete-deck') {
+      const n = decks.find((d) => d.name === deck)?.files.length ?? 0;
+      const r = await ask('Excluir apresentação?', {
+        text: `A pasta slides/${deck}/ e ${n === 1 ? 'o slide dela' : `os ${n} slides dela`} serão apagados do disco.`,
+        ok: 'Excluir',
+        danger: true,
+      });
+      if (!r) return;
+      if (current && deckOf(current) === deck) closeFile();
+      await api(`deck?name=${encodeURIComponent(deck)}`, { method: 'DELETE' });
+      if (previewDeck === deck) {
+        previewDeck = null;
+        iframe.removeAttribute('src');
+      }
+      open.delete(deck);
       await refreshTree();
     } else if (file) {
       await openFile(file);
