@@ -5,15 +5,14 @@ import { getDecks } from '../lib/decks';
 
 const decks = await getDecks();
 const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
-// O editor (editor/plugin.mjs) só existe no servidor de desenvolvimento.
 const dev = import.meta.env.DEV;
 ---
 
-<Base title="Apresentações · LibreSlide" theme="aurora">
+<Base title="LibreSlide" theme="paper">
   <div class="home">
     <header class="home-head">
       <p class="eyebrow">LibreSlide · {decks.length} {decks.length === 1 ? 'apresentação' : 'apresentações'}</p>
-      <h1>Apresentações</h1>
+      <h1>LibreSlide</h1>
       <p class="lead">
         Cada pasta em <code>slides/</code> vira uma apresentação, e cada arquivo <code>.md</code> dentro dela, um slide.
       </p>

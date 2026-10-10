@@ -49,7 +49,7 @@ npm run build          # gera um site estático em dist/
 
 Na página inicial, o botão **Abrir editor** leva direto para ele (aparece só no `npm run dev`).
 
-O editor só existe no servidor de desenvolvimento (`editor/plugin.mjs`); não vai para o `npm run build`.
+O editor roda localmente, junto com o `libreslide` / `npm run editor`. Ao gerar o site para publicar (`libreslide build` / `npm run build`), só os slides vão para `dist/`; o editor fica de fora, já que o site publicado é estático e não pode gravar arquivos.
 
 ## Estrutura
 
