@@ -84,9 +84,13 @@ async function api<T = any>(path: string, init: RequestInit & { json?: unknown }
   }
   const res = await fetch(`/__editor/api/${path}`, rest);
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error ?? res.statusText);
+  if (!res.ok) throw new Error(res.status === 404 && data.error === UNKNOWN_ROUTE ? OUTDATED : data.error ?? res.statusText);
   return data;
 }
+// O plugin do servidor só é recarregado ao reiniciar; a página, não. Depois de
+// uma atualização, a página nova pode chamar uma rota que o servidor antigo não tem.
+const UNKNOWN_ROUTE = 'Rota desconhecida.';
+const OUTDATED = 'O servidor está desatualizado em relação ao editor. Reinicie-o (Ctrl+C e rode de novo) e recarregue a página.';
 const q = (p: string) => `path=${encodeURIComponent(p)}`;
 
 // ───────────────────────── interface ─────────────────────────
@@ -97,7 +101,7 @@ function toast(msg: string, error = false) {
   t.classList.toggle('error', error);
   t.hidden = false;
   clearTimeout((t as any).timer);
-  (t as any).timer = setTimeout(() => (t.hidden = true), error ? 5000 : 2500);
+  (t as any).timer = setTimeout(() => (t.hidden = true), error ? Math.max(5000, msg.length * 60) : 2500);
 }
 
 function setStatus(state: 'idle' | 'dirty' | 'saving' | 'saved' | 'error', text = '') {
