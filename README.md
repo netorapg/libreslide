@@ -1,196 +1,198 @@
 # LibreSlide
 
-Slides livres em Markdown, com editor no navegador. Software livre, gratuito e feito com [Astro](https://astro.build): **cada pasta em `slides/` é uma apresentação e cada arquivo `.md` dentro dela é um slide.**
+[Português](README.md) · **English**
 
-> Projeto independente, sem ligação com o LibreOffice ou a The Document Foundation.
+Free slides in Markdown, with an editor in the browser. Free and open-source software built with [Astro](https://astro.build): **each folder in `slides/` is a presentation, and each `.md` file inside it is a slide.**
 
-## Começar
+> Independent project, not affiliated with LibreOffice or The Document Foundation.
 
-Com o [Node.js](https://nodejs.org) 22.12 ou mais novo instalado, rode no terminal:
+The editor's interface is in Portuguese. Where this guide mentions a button or menu, the label is shown as it appears on screen, with its meaning in English.
+
+## Getting started
+
+With [Node.js](https://nodejs.org) 22.12 or newer installed, run in a terminal:
 
 ```bash
 npx libreslide
 ```
 
-O comando pergunta onde guardar suas apresentações (Enter aceita `~/Apresentacoes`), cria a pasta com uma apresentação de exemplo e abre o editor no navegador. Da próxima vez, ele sugere a mesma pasta.
+The command asks where to keep your presentations (Enter accepts `~/Apresentacoes`), creates the folder with a sample presentation and opens the editor in the browser. Next time, it suggests the same folder.
 
 ```bash
-npx libreslide ~/minhas-palestras               # pula a pergunta
-npx libreslide ~/minhas-palestras --port 5000
-npx libreslide build ~/minhas-palestras         # site estático em ~/minhas-palestras/dist
-npm install -g libreslide                       # instala de vez; depois é só `libreslide`
+npx libreslide ~/my-talks               # skips the question
+npx libreslide ~/my-talks --port 5000
+npx libreslide build ~/my-talks         # static site in ~/my-talks/dist
+npm install -g libreslide               # installs it for good; after that, just `libreslide`
 ```
 
-A pasta contém só o seu conteúdo (`slides/`, `themes/`, `templates/`, `public/img/`); o programa fica separado dela. O clique no caminho, no canto da barra lateral do editor, abre a pasta no gerenciador de arquivos. A primeira execução demora um pouco (instala o Astro e o editor); as seguintes usam o cache.
+The folder holds only your content (`slides/`, `themes/`, `templates/`, `public/img/`); the program lives apart from it. Clicking the path in the corner of the editor's sidebar opens the folder in your file manager. The first run takes a while (it installs Astro and the editor); later runs use the cache.
 
-## Desenvolvendo (clonando o repositório)
+## Developing (cloning the repository)
 
 ```bash
 git clone https://github.com/netorapg/libreslide && cd libreslide
 npm install
-npm run dev            # abre http://localhost:4321
-npm run editor         # editor no navegador: http://localhost:4321/__editor/
-npm run nova -- minha-palestra [tema ou template]   # aurora, paper, noir, sunset, um tema seu ou um template
-npm run build          # gera um site estático em dist/
+npm run dev            # opens http://localhost:4321
+npm run editor         # editor in the browser: http://localhost:4321/__editor/
+npm run nova -- my-talk [theme or template]   # aurora, paper, noir, sunset, one of your themes or a template
+npm run build          # generates a static site in dist/
 ```
 
 ## Editor
 
-`npm run editor` abre um editor no navegador: arquivos à esquerda, o `.md` no meio e o slide de verdade à direita, atualizando a cada alteração.
+`npm run editor` opens an editor in the browser: files on the left, the `.md` in the middle and the real slide on the right, updating on every change.
 
-- Salva sozinho enquanto você digita (<kbd>Ctrl</kbd>+<kbd>S</kbd> força na hora).
-- Cria apresentações e slides, renomeia (a ordem segue o nome) e exclui pela barra lateral.
-- Seletor de **Layout**, menu **Inserir** (cartões, número em destaque, colunas…) e autocompletar das chaves do frontmatter.
-- Arraste ou cole uma imagem no editor: ela vai para `public/img/` e o Markdown é inserido.
-- Navegar no preview (setas) abre o arquivo correspondente; <kbd>Ctrl</kbd>+<kbd>PageUp/PageDown</kbd> faz o inverso.
-- Se o arquivo mudar por fora (outro editor, git), o editor recarrega.
-- Erros no frontmatter aparecem sublinhados na linha, com a explicação embaixo do preview.
-- **Exportar**: PDF da apresentação (idêntico à tela, um slide por página), PNG do slide atual ou impressão pelo navegador (PDF com texto selecionável). O PDF e o PNG usam o Chrome/Chromium instalado; se ele não for encontrado, defina `CHROME_PATH`.
+- Saves by itself as you type (<kbd>Ctrl</kbd>+<kbd>S</kbd> forces it right away).
+- Creates presentations and slides, renames them (the order follows the name) and deletes them from the sidebar.
+- **Layout** selector, **Inserir** (Insert) menu with cards, highlighted number, columns and more, and autocomplete for frontmatter keys.
+- Drag or paste an image into the editor: it goes to `public/img/` and the Markdown is inserted.
+- Navigating in the preview (arrow keys) opens the matching file; <kbd>Ctrl</kbd>+<kbd>PageUp/PageDown</kbd> does the reverse.
+- If the file changes from outside (another editor, git), the editor reloads it.
+- Frontmatter errors are underlined on the line, with the explanation below the preview.
+- **Exportar** (Export): PDF of the presentation (identical to the screen, one slide per page), PNG of the current slide, or printing through the browser (PDF with selectable text). PDF and PNG use the installed Chrome/Chromium; if it is not found, set `CHROME_PATH`.
 
-Na página inicial, o botão **Abrir editor** leva direto para ele (aparece só no `npm run dev`).
+On the home page, the **Abrir editor** (Open editor) button takes you straight to it (it only appears under `npm run dev`).
 
-O editor roda localmente, junto com o `libreslide` / `npm run editor`. Ao gerar o site para publicar (`libreslide build` / `npm run build`), só os slides vão para `dist/`; o editor fica de fora, já que o site publicado é estático e não pode gravar arquivos.
+The editor runs locally, alongside `libreslide` / `npm run editor`. When you generate the site for publishing (`libreslide build` / `npm run build`), only the slides go to `dist/`; the editor is left out, since the published site is static and cannot write files.
 
-## Estrutura
+## Structure
 
 ```
 slides/
-  minha-palestra/
-    01-capa.md        ← a ordem é a do nome do arquivo
+  my-talk/
+    01-cover.md       ← the order is the order of the file names
     02-agenda.md
-    _rascunho.md      ← arquivos começando com "_" são ignorados
-public/img/           ← imagens (use image: /img/foto.jpg)
-themes/               ← temas seus (meu-tema.yaml)
-templates/            ← templates de instituição (uma pasta cada)
+    _draft.md         ← files starting with "_" are ignored
+public/img/           ← images (use image: /img/photo.jpg)
+themes/               ← your own themes (my-theme.yaml)
+templates/            ← institution templates (one folder each)
 ```
 
-### Suas apresentações ficam fora do git
+### Your presentations stay out of git
 
-Só `slides/exemplo/` (e a imagem dela), o tema `themes/oceano.yaml` e o template `templates/instituicao-exemplo/` são versionados. Qualquer outra pasta em `slides/`, imagem em `public/img/`, tema em `themes/` ou template em `templates/` é ignorado pelo `.gitignore`, então você pode clonar o projeto, fazer as suas palestras e atualizar o código com `git pull` sem misturar conteúdo pessoal.
+Only `slides/exemplo/` (and its image), the theme `themes/oceano.yaml` and the template `templates/instituicao-exemplo/` are versioned. Any other folder in `slides/`, image in `public/img/`, theme in `themes/` or template in `templates/` is ignored by `.gitignore`, so you can clone the project, write your talks and update the code with `git pull` without mixing in personal content.
 
-Quer versionar uma apresentação no seu fork? Adicione ao `.gitignore`:
+Want to version a presentation in your fork? Add to `.gitignore`:
 
 ```gitignore
-!slides/minha-palestra/
-!public/img/minha-foto.jpg
-!themes/meu-tema.yaml
-!templates/minha-instituicao/
+!slides/my-talk/
+!public/img/my-photo.jpg
+!themes/my-theme.yaml
+!templates/my-institution/
 ```
 
-## Um slide
+## A slide
 
 ```md
 ---
 layout: split             # cover | default | section | center | statement | quote | split | image | columns
-theme: aurora             # aurora | paper | noir | sunset | um seu (no 1º slide vale para a apresentação toda)
-template: minha-instituicao  # só no 1º slide: aplica um template de templates/
-kicker: Introdução        # rótulo pequeno acima do título
-title: Olá, *mundo*       # *texto* ganha destaque em gradiente; <br> quebra linha
-subtitle: Uma frase curta
-image: /img/foto.jpg      # para layouts split e image
-imagePosition: left       # split: imagem à esquerda
-steps: true               # revela itens de lista um a um
-accent: "#22c55e"         # cor de destaque só deste slide
-author: Fulano            # cover e quote
-date: Setembro 2026
+theme: aurora             # aurora | paper | noir | sunset | one of yours (on the 1st slide it applies to the whole presentation)
+template: my-institution  # 1st slide only: applies a template from templates/
+kicker: Introduction      # small label above the title
+title: Hello, *world*     # *text* gets a gradient highlight; <br> breaks the line
+subtitle: A short sentence
+image: /img/photo.jpg     # for the split and image layouts
+imagePosition: left       # split: image on the left
+steps: true               # reveals list items one by one
+accent: "#22c55e"         # accent color for this slide only
+author: Jane Doe          # cover and quote
+date: September 2026
 notes: |
-  Notas do apresentador (tecla N).
+  Presenter notes (N key).
 ---
 
-Conteúdo em **Markdown** normal: listas, tabelas, código, imagens, citações.
+Content in regular **Markdown**: lists, tables, code, images, quotes.
 ```
 
-| Layout      | Para quê                                                        |
+| Layout      | What it is for                                                  |
 | ----------- | --------------------------------------------------------------- |
-| `cover`     | Capa com título grande, autor e data                            |
-| `default`   | Título + conteúdo                                               |
-| `section`   | Abertura de seção (use `kicker: "02"` para o número vazado)     |
-| `center`    | Tudo centralizado                                               |
-| `statement` | Uma frase enorme; `**negrito**` vira gradiente                  |
-| `quote`     | Citação; o `author` vira a assinatura                           |
-| `split`     | Texto + imagem lado a lado                                      |
-| `image`     | Imagem em tela cheia com texto por cima                         |
-| `columns`   | Colunas separadas por uma linha `***`                           |
+| `cover`     | Cover with a large title, author and date                       |
+| `default`   | Title + content                                                 |
+| `section`   | Section opener (use `kicker: "02"` for the outlined number)     |
+| `center`    | Everything centered                                             |
+| `statement` | One huge sentence; `**bold**` becomes a gradient                |
+| `quote`     | Quotation; `author` becomes the signature                       |
+| `split`     | Text + image side by side                                       |
+| `image`     | Full-screen image with text on top                              |
+| `columns`   | Columns separated by a `***` line                               |
 
-## Temas
+## Themes
 
-Há quatro prontos — `aurora`, `paper`, `noir` e `sunset` — e você pode criar os seus sem escrever CSS. Um tema é um arquivo `themes/<nome>.yaml`:
+There are four built in (`aurora`, `paper`, `noir` and `sunset`), and you can create your own without writing CSS. A theme is a `themes/<name>.yaml` file:
 
 ```yaml
 mode: dark          # dark | light
-background: aurora  # aurora | paper | noir | sunset | plain (liso)
-font: sans          # sans | serif | mono — fonte dos títulos
+background: aurora  # aurora | paper | noir | sunset | plain
+font: sans          # sans | serif | mono (font for titles)
 colors:
   background: "#04131f"
   text: "#e8f6ff"
   muted: "#8eb1c7"
-  accent: "#38bdf8"   # destaque e luzes do fundo
-  accent2: "#2dd4bf"  # gradiente dos títulos
+  accent: "#38bdf8"   # highlight and background lights
+  accent2: "#2dd4bf"  # title gradient
   accent3: "#818cf8"
-corners: 20         # 0 a 60
-grain: 0.06         # 0 a 0.3
+corners: 20         # 0 to 60
+grain: 0.06         # 0 to 0.3
 ```
 
-e se usa com `theme: <nome>` no slide. O jeito mais fácil é pelo editor: na seção **Temas** da barra lateral, clique em **+** (ou no **+** de um tema pronto para partir dele), ajuste cores, fonte e fundo vendo o resultado ao vivo e clique em **Usar em …** para aplicar à apresentação. `themes/oceano.yaml` é um exemplo; os seus temas ficam fora do git, como as apresentações.
+and you use it with `theme: <name>` on the slide. The easiest way is through the editor: in the **Temas** (Themes) section of the sidebar, click **+** (or the **+** on a built-in theme to start from it), adjust colors, font and background while watching the result live, and click **Usar em …** (Use in …) to apply it to the presentation. `themes/oceano.yaml` is an example; your themes stay out of git, like your presentations.
 
-## Templates (padrão de uma instituição)
+## Templates (an institution's standard)
 
-Algumas instituições exigem que toda apresentação siga um padrão: logo, rodapé, tamanho de letra, sem animações. Um **template** guarda essas regras numa pasta, e a apresentação só precisa de `template: <nome>` no primeiro slide:
+Some institutions require every presentation to follow a standard: logo, footer, font size, no animations. A **template** keeps those rules in a folder, and the presentation only needs `template: <name>` on the first slide:
 
 ```
-templates/minha-instituicao/
-  template.yaml     ← as regras
-  logo.svg          ← a logo (png, jpg, svg, webp…)
-  01-capa.md        ← slides iniciais (opcionais): copiados para cada apresentação nova
-  02-conteudo.md
+templates/my-institution/
+  template.yaml     ← the rules
+  logo.svg          ← the logo (png, jpg, svg, webp…)
+  01-cover.md       ← starter slides (optional): copied into each new presentation
+  02-content.md
 ```
 
 ```yaml
-name: "Universidade Exemplo"   # nome exibido
-theme: paper                   # tema (pronto ou de themes/)
-lockTheme: true                # os slides não podem trocar o tema
-logo: "logo.svg"               # arquivo da pasta (ou /img/...)
+name: "Example University"     # displayed name
+theme: paper                   # theme (built in or from themes/)
+lockTheme: true                # slides cannot change the theme
+logo: "logo.svg"               # file in the folder (or /img/...)
 logoPosition: top-right        # top-left | top-right | bottom-left | bottom-right
-logoSize: 72                   # altura em px (slide de 1920×1080)
-logoOnCover: true              # logo também na capa
-footer: "{title} · Universidade Exemplo"   # {title} = nome da apresentação; "" = sem texto
-slideNumbers: true             # numeração no rodapé
-textSize: 1                    # tamanho do texto (0.6 a 1.6)
-titleSize: 1                   # tamanho dos títulos (0.6 a 1.6)
-animations: false              # sem transições e sem itens revelados aos poucos
+logoSize: 72                   # height in px (1920×1080 slide)
+logoOnCover: true              # logo on the cover too
+footer: "{title} · Example University"   # {title} = presentation name; "" = no text
+slideNumbers: true             # numbering in the footer
+textSize: 1                    # text size (0.6 to 1.6)
+titleSize: 1                   # title size (0.6 to 1.6)
+animations: false              # no transitions and no step-by-step reveals
 ```
 
-Pelo editor é mais fácil: na seção **Templates** da barra lateral, clique em **+**, envie a logo e ajuste o resto vendo a prévia. **Usar em …** aplica o template à apresentação, e **Usar os slides de …** transforma uma apresentação pronta nos slides iniciais do template. Ao criar uma apresentação (no editor ou com `npm run nova -- nome minha-instituicao`), escolha o template e ela já começa com esses slides.
+It is easier through the editor: in the **Templates** section of the sidebar, click **+**, upload the logo and adjust the rest while watching the preview. **Usar em …** (Use in …) applies the template to the presentation, and **Usar os slides de …** (Use the slides from …) turns a finished presentation into the template's starter slides. When you create a presentation (in the editor or with `npm run nova -- name my-institution`), choose the template and it starts with those slides.
 
-Para compartilhar com colegas, basta copiar a pasta do template. `templates/instituicao-exemplo/` é um exemplo.
+To share with colleagues, just copy the template's folder. `templates/instituicao-exemplo/` is an example.
 
-### Extras no Markdown
+### Markdown extras
 
-- `<div class="cards">…</div>` — cartões de vidro lado a lado (cada filho é um cartão; deixe linhas em branco em volta do Markdown dentro do HTML).
-- `<span class="stat">42%</span>` — número grande em gradiente.
-- `<p class="step">…</p>` — qualquer elemento com a classe `step` aparece em etapas.
-- `==texto==` não existe em Markdown padrão; use `<mark>texto</mark>` para marca-texto.
+- `<div class="cards">…</div>`: glass cards side by side (each child is a card; leave blank lines around Markdown inside the HTML).
+- `<span class="stat">42%</span>`: a large gradient number.
+- `<p class="step">…</p>`: any element with the `step` class appears in steps.
+- `==text==` does not exist in standard Markdown; use `<mark>text</mark>` for a highlighter effect.
 
-## Apresentando
+## Presenting
 
-| Tecla          | Ação                          |
-| -------------- | ----------------------------- |
-| `→` `Espaço`   | Próximo slide / etapa         |
-| `←`            | Voltar                        |
-| `O` / `Esc`    | Visão geral                   |
-| `F`            | Tela cheia                    |
-| `N`            | Notas do apresentador         |
-| `?`            | Ajuda                         |
-| `Ctrl` + `P`   | Exportar PDF (um slide por página) |
+| Key            | Action                           |
+| -------------- | -------------------------------- |
+| `→` `Space`    | Next slide / step                |
+| `←`            | Back                             |
+| `O` / `Esc`    | Overview                         |
+| `F`            | Full screen                      |
+| `N`            | Presenter notes                  |
+| `?`            | Help                             |
+| `Ctrl` + `P`   | Export PDF (one slide per page)  |
 
-O endereço guarda o slide atual (`/minha-palestra/#5`). No celular, deslize para os lados.
+The address keeps the current slide (`/my-talk/#5`). On a phone, swipe sideways.
 
-## Criando um tema pronto (no código)
+## Creating a built-in theme (in the code)
 
-Para a maioria dos casos, um tema em `themes/` basta (veja **Temas**). Os quatro temas prontos
-são variáveis CSS em `src/styles/themes.css`; para criar outro do mesmo jeito, copie um bloco,
-renomeie e adicione o nome em `builtinThemes`, `builtinInfo` e `builtinPresets` (`src/lib/themes.ts`).
+For most cases, a theme in `themes/` is enough (see **Themes**). The four built-in themes are CSS variables in `src/styles/themes.css`; to create another one the same way, copy a block, rename it and add the name to `builtinThemes`, `builtinInfo` and `builtinPresets` (`src/lib/themes.ts`).
 
-## Licença
+## License
 
-[MIT](LICENSE) © 2026 netorapg. Use, modifique e distribua à vontade, mantendo o aviso de copyright.
+[MIT](LICENSE) © 2026 netorapg. Use, modify and distribute freely, keeping the copyright notice.
